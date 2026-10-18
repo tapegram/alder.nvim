@@ -13,10 +13,17 @@ vim.api.nvim_create_autocmd('User', {
 
 require('alder.parser').register()
 
+vim.api.nvim_create_autocmd('FileType', {
+  group = group,
+  pattern = 'alder',
+  callback = function(ev) require('alder.lsp').start(ev.buf) end,
+})
+
 vim.api.nvim_create_autocmd('BufWritePost', {
   group = group,
   pattern = '*.alder',
   callback = function(ev)
+    if vim.b[ev.buf].alder_lsp then return end -- the server publishes the diagnostics
     if not require('alder.config').options.check_on_save then return end
     local r = require('alder.root').for_buf(ev.buf)
     if r then require('alder.check').run(r) end
@@ -42,11 +49,3 @@ end, {
   complete = function(arglead, cmdline) return require('alder.commands').complete(arglead, cmdline) end,
   desc = 'run alder <command>: generators preview their diff first',
 })
-
-vim.api.nvim_create_user_command('AlderNew', function()
-  require('alder.generate').new_interactive()
-end, { desc = 'pick a generator, type its arguments, preview, apply' })
-
-vim.api.nvim_create_user_command('AlderFill', function(o)
-  require('alder.fill').fill(o.bang)
-end, { bang = true, desc = 'fill the typed hole under the cursor (! replaces the whole declaration body)' })

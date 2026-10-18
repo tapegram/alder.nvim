@@ -5,6 +5,8 @@ M.defaults = {
   check_on_save = true, -- run `alder check` after writing an .alder buffer
   preview = true, -- generators show their diff before writing
   path = nil, -- an alder checkout to install the parser from (grammar development)
+  lsp = true, -- attach `alder lsp`; false keeps CLI mode
+  keys = { actions = '<leader>aa', diagnostics = '<leader>ac', explain = '<leader>ae', run = '<leader>ar' }, -- each can be false
   revision = nil, -- a tag of tapegram/alder to install the parser from, e.g. 'v0.2.0'
 }
 

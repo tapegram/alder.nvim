@@ -102,6 +102,8 @@ test('check: open_qf opens the quickfix window for an error in another file', fu
 end)
 
 test('fix: :AlderFix applies the fix under the cursor; saving clears the diagnostic', function()
+  local saved = require('alder.config').options
+  require('alder.config').set({ lsp = false, path = saved.path }) -- CLI mode: check-on-save only runs without the server
   local app, file = fixture()
   vim.cmd.edit(app .. '/' .. file)
   local buf = vim.api.nvim_get_current_buf()
@@ -116,6 +118,7 @@ test('fix: :AlderFix applies the fix under the cursor; saving clears the diagnos
   vim.cmd('silent write') -- BufWritePost runs alder check (check_on_save)
   -- Review Focus 3: the fixed file loses its diagnostic
   assert(H.wait(20000, function() return #diags(buf, 'E0102') == 0 end), vim.inspect(diags(buf)))
+  require('alder.config').options = saved
 end)
 
 -- Review Focus 3: a superseded run must not publish late.
