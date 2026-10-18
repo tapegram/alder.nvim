@@ -114,7 +114,7 @@ end)
 
 -- remove_page opens a fresh page in a blog copy (every blog page is linked from another) and
 -- runs `remove page` on it, answering the confirm with answer.
-local function remove_page(answer)
+local function remove_page(answer, meanwhile)
   local buf, root = blog_buf('app/Tags/Index.alder', function(dst)
     local r = vim.system({ 'alder', 'new', 'page', 'Tags.Index', '/tags', '--dir', dst }, { text = true }):wait()
     assert(r.code == 0, r.stderr)
@@ -125,6 +125,7 @@ local function remove_page(answer)
   local ok, err = pcall(function()
     vim.ui.select = function(items, opts, cb)
       asked = { items = items, prompt = opts.prompt }
+      if meanwhile then meanwhile() end
       cb(answer)
     end
     messages, restore = H.capture_notify()
@@ -155,4 +156,30 @@ test('apply: remove page asks, and No applies nothing', function()
   assert(not done and #messages == 0, 'applied after No: ' .. vim.inspect(messages))
   assert(vim.fn.filereadable(root .. '/app/Tags/Index.alder') == 1, 'deleted after No')
   assert(vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf), 'buffer wiped after No')
+end)
+
+test('apply: remove page re-checks after the confirm; an edit made while it was open aborts', function()
+  local buf, root, asked, messages, done = remove_page('Yes', function()
+    vim.api.nvim_buf_set_lines(vim.fn.bufnr('Tags/Index.alder'), 0, 0, false, { '-- typed meanwhile' })
+  end)
+  assert(asked, 'did not ask')
+  assert(not done, 'applied over the edit')
+  assert(messages[1].msg == 'alder: app/Tags/Index.alder changed since planning; nothing applied', vim.inspect(messages))
+  assert(vim.fn.filereadable(root .. '/app/Tags/Index.alder') == 1, 'deleted a changed file')
+  assert(vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == '-- typed meanwhile')
+end)
+
+test('apply: a nil plan result does nothing', function()
+  local buf = blog_buf('app/Post.alder')
+  local lsp = require('alder.lsp')
+  local orig = lsp.request
+  local messages, restore = H.capture_notify()
+  local ok, err = pcall(function()
+    lsp.request = function(_, _, _, cb) cb(nil); cb(vim.NIL) end
+    apply.run(buf, 'new msg', { name = 'Delete' })
+  end)
+  lsp.request = orig
+  restore()
+  assert(ok, err)
+  assert(#messages == 0, vim.inspect(messages))
 end)

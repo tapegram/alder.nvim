@@ -89,18 +89,28 @@ function M.run(buf, id, sets, on_done, pos)
   }
   for k, v in pairs(sets or {}) do params.sets[k] = v end
   require('alder.lsp').request(buf, 'alder/plan', params, function(plan)
+    plan = null(plan)
+    if not plan then return end
     if null(plan.error) and plan.error ~= '' then
       vim.notify(plan.error, vim.log.levels.ERROR)
       require('alder.generate').refusal_list(r, { id }, null(plan.diagnostics))
       return
     end
     local files = null(plan.files) or {}
+    -- unchanged reports whether every file still reads as the plan's `before`; it runs again
+    -- after the remove confirm, since an async vim.ui.select lets the user edit meanwhile.
+    local function unchanged()
+      for _, f in ipairs(files) do
+        if M.text_of(r .. '/' .. f.path) ~= null(f.before) then
+          vim.notify('alder: ' .. f.path .. ' changed since planning; nothing applied', vim.log.levels.ERROR)
+          return false
+        end
+      end
+      return true
+    end
+    if not unchanged() then return end
     local removed
     for _, f in ipairs(files) do
-      if M.text_of(r .. '/' .. f.path) ~= null(f.before) then
-        vim.notify('alder: ' .. f.path .. ' changed since planning; nothing applied', vim.log.levels.ERROR)
-        return
-      end
       if not removed and null(f.after) == nil then removed = f.path end
     end
     local function apply()
@@ -117,7 +127,7 @@ function M.run(buf, id, sets, on_done, pos)
     end
     if not removed then return apply() end
     vim.ui.select({ 'Yes', 'No' }, { prompt = 'Delete ' .. removed .. ' from disk? undo cannot restore it' }, function(choice)
-      if choice == 'Yes' then apply() end
+      if choice == 'Yes' and unchanged() then apply() end
     end)
   end)
 end
