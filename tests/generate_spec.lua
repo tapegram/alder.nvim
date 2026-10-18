@@ -92,7 +92,7 @@ test('generate: a refusal with diagnostics goes to its own quickfix list, not th
   local q = vim.fn.getqflist({ title = 0, items = 0, nr = '$' })
   assert(q.title == 'alder fill' and #q.items == 1 and q.items[1].text == 'E0001 bad', vim.inspect(q))
   assert(#vim.diagnostic.get(0) == 0, 'refusal diagnostics were set on a buffer')
-  vim.cmd('colder')
+  vim.cmd('silent colder')
   assert(vim.fn.getqflist({ title = 0 }).title == 'mine')
 end)
 
