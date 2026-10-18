@@ -41,6 +41,9 @@ vim.bo.errorformat = table.concat({
 vim.b.match_ignorecase = 0
 vim.b.match_words = [[<:>,<\@<=\([^/!][^ \t>]*\)[^>]*\%(>\|$\):<\@<=/\1>]]
 
+require('alder.keys').attach(0)
+
 vim.b.undo_ftplugin = (vim.b.undo_ftplugin and (vim.b.undo_ftplugin .. ' | ') or '')
   .. 'setl commentstring< comments< shiftwidth< tabstop< softtabstop< expandtab< autoread< indentexpr< include< includeexpr< suffixesadd< path< makeprg< errorformat<'
+  .. " | call v:lua.require'alder.keys'.detach(0)"
   .. ' | unlet! b:did_ftplugin_alder b:match_words b:match_ignorecase'

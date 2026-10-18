@@ -34,6 +34,10 @@ vim.api.nvim_create_user_command('AlderCheck', function()
   require('alder.check').for_current({ open_qf = true })
 end, { desc = 'alder check: diagnostics in buffers, other files in the quickfix list' })
 
+vim.api.nvim_create_user_command('AlderDiagnostics', function()
+  require('alder.keys').actions.diagnostics()
+end, { desc = 'alder diagnostics of the open buffers in the quickfix list' })
+
 vim.api.nvim_create_user_command('AlderFix', function()
   require('alder.check').fix_at_cursor()
 end, { desc = 'apply the compiler fix under the cursor' })

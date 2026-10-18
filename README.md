@@ -76,8 +76,7 @@ run so the grammar matches your compiler.
 | `:AlderFix` | apply the compiler's fix for the diagnostic under the cursor |
 | `:AlderExplain [code]` | `alder explain` for the code (default: the diagnostic under the cursor) |
 | `:Alder <args…>` | any `alder` command, with completion; generators preview their diff |
-| `:AlderNew` | pick a generator, type its arguments, add flags, preview, apply |
-| `:AlderFill[!]` | fill the typed hole under the cursor; `!` replaces the whole declaration body |
+| `:AlderDiagnostics` | the buffers' diagnostics in the quickfix list (`<leader>ac`) |
 
 Generators refuse to run while an `.alder` buffer of the app has unsaved changes, because the
 CLI edits files on disk: `:wall` first.
@@ -93,22 +92,17 @@ and its diagnostics go to their own quickfix list titled `alder <command>` (for 
 `alder edit`). They describe the dry-run copy, not your buffers, so they are not published as
 diagnostics and your `alder check` list stays in the quickfix stack.
 
-### Filling holes
+### Keys
 
-`:AlderFill` opens a scratch split for the typed hole under the cursor (or the file's only hole),
-with the hole's name and type in a header. Type the expression below the header and press `<CR>`
-(or `:w`) to apply it; `q` closes the scratch. The scratch is named
-`alder://fill/<address>/?name`, or `alder://fill/<address>` with `!`, so each hole has its own
-scratch and reopening one returns to it with your text.
-
-`:Alder fill … -` refuses and points to `:AlderFill`: the CLI reads the expression from stdin,
-which a command line cannot supply.
+In `.alder` buffers: `<leader>ac` diagnostics to quickfix, `<leader>ae` explain the diagnostic
+under the cursor, `<leader>ar` `alder run`. Each can be set to `false` in `opts.keys`. With
+which-key, `<leader>a` is the group "alder". `alder fill … -` reads stdin: run it in a terminal.
 
 ## Development
 
 ```sh
 nvim --headless -u tests/minimal.lua -l tests/run.lua          # all tests
-nvim --headless -u tests/minimal.lua -l tests/run.lua fill     # tests whose name contains "fill"
+nvim --headless -u tests/minimal.lua -l tests/run.lua keys     # tests whose name contains "keys"
 ```
 
 `NVIM_TS` points at an nvim-treesitter checkout (default: lazy.nvim's) and `ALDER_REPO` at an

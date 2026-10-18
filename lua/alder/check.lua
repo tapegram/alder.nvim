@@ -165,15 +165,42 @@ function M.fix_at_cursor()
   return ok
 end
 
--- explain shows `alder explain <code>` for the given code or the diagnostic under the cursor.
+-- under_cursor is the alder diagnostic under the cursor from any namespace (the server's or
+-- the CLI's): the one whose range holds the cursor, else the first alder one on the line.
+local function under_cursor(buf)
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  row = row - 1
+  local line
+  for _, d in ipairs(vim.diagnostic.get(buf, { lnum = row })) do
+    if d.source == 'alder' and d.code then
+      line = line or d
+      local ends = d.end_lnum > row or col < d.end_col or d.end_col == d.col
+      if col >= d.col and ends then return d end
+    end
+  end
+  return line
+end
+
+local function show(text)
+  vim.lsp.util.open_floating_preview(vim.split(vim.trim(text), '\n', { plain = true }), 'markdown',
+    { border = 'rounded', max_width = 80, focus_id = 'alder-explain' })
+end
+
+-- explain shows the explanation of the given code or of the alder diagnostic under the cursor,
+-- through the language server when attached and `alder explain` otherwise.
 function M.explain(code)
+  local buf = vim.api.nvim_get_current_buf()
   if not code or code == '' then
-    local here, line = at_cursor(vim.api.nvim_get_current_buf())
-    local d = here or line
-    code = d and d.code
+    local d = under_cursor(buf)
+    code = d and d.code and tostring(d.code)
   end
   if not code then
     vim.notify('alder: no diagnostic under the cursor', vim.log.levels.WARN)
+    return
+  end
+  if vim.b[buf].alder_lsp then
+    require('alder.lsp').request(buf, 'workspace/executeCommand', { command = 'alder.explain', arguments = { code } },
+      function(text) if text then show(text) end end)
     return
   end
   cli.run({ 'explain', code }, { cwd = vim.fn.getcwd() }, function(res)
@@ -181,8 +208,7 @@ function M.explain(code)
       cli.report({ 'explain', code }, res, { bug_on_2 = false })
       return
     end
-    vim.lsp.util.open_floating_preview(vim.split(vim.trim(res.stdout), '\n', { plain = true }), 'markdown',
-      { border = 'rounded', max_width = 80, focus_id = 'alder-explain' })
+    show(res.stdout)
   end)
 end
 
