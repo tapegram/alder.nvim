@@ -41,6 +41,9 @@ end
 
 -- scratch opens a bottom split on a new scratch buffer holding lines and returns the buffer.
 function M.scratch(name, lines, filetype)
+  -- a buffer already holding the name would make set_name fail: wipe it so the new one gets the name
+  local old = vim.fn.bufnr('^' .. vim.fn.escape(name, '\\.[]*~$^') .. '$')
+  if old ~= -1 then pcall(vim.api.nvim_buf_delete, old, { force = true }) end
   vim.cmd('botright new')
   local buf = vim.api.nvim_get_current_buf()
   vim.bo[buf].buftype = 'nofile'

@@ -34,3 +34,15 @@ end, { desc = 'apply the compiler fix under the cursor' })
 vim.api.nvim_create_user_command('AlderExplain', function(o)
   require('alder.check').explain(o.args)
 end, { nargs = '?', desc = 'alder explain <code> (default: the diagnostic under the cursor)' })
+
+vim.api.nvim_create_user_command('Alder', function(o)
+  require('alder.commands').alder(o.fargs)
+end, {
+  nargs = '+',
+  complete = function(arglead, cmdline) return require('alder.commands').complete(arglead, cmdline) end,
+  desc = 'run alder <command>: generators preview their diff first',
+})
+
+vim.api.nvim_create_user_command('AlderNew', function()
+  require('alder.generate').new_interactive()
+end, { desc = 'pick a generator, type its arguments, preview, apply' })
