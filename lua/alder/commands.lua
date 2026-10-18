@@ -117,6 +117,11 @@ function M.alder(fargs)
   end
   -- `new <name>` (not a generator kind) scaffolds an app, from the current directory
   local new = M.find({ 'new' })
+  if name == 'new' and fargs[2] ~= nil and not new then
+    -- without the tree a generator cannot be told from app scaffolding: run nothing
+    vim.notify('alder: `alder help --json` failed; is alder on PATH and recent enough?', vim.log.levels.ERROR)
+    return
+  end
   local scaffold = name == 'new' and fargs[2] ~= nil and not (new and child(new.subcommands, fargs[2]))
   if GENERATORS[name] and not scaffold then
     require('alder.generate').run(fargs)

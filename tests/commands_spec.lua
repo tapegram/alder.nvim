@@ -32,3 +32,20 @@ test('completion: --from takes free text', function()
   assert(node, 'restore not in the tree')
   assert(#commands.complete('', 'Alder restore --from ') == 0)
 end)
+
+test('commands: with no help tree, :Alder new <kind> runs nothing and writes nothing', function()
+  local H = require('helpers')
+  local app = H.new_app()
+  vim.cmd.edit(app .. '/app/App.alder')
+  local orig_find, orig_run = commands.find, require('alder.cli').run
+  local ran = 0
+  commands.find = function() return nil end
+  require('alder.cli').run = function(...) ran = ran + 1 return orig_run(...) end
+  local messages, restore = H.capture_notify()
+  commands.alder({ 'new', 'page', 'Hello', '/hello' })
+  restore()
+  commands.find, require('alder.cli').run = orig_find, orig_run
+  assert(ran == 0, 'cli.run was called')
+  assert(messages[1] and messages[1].msg == 'alder: `alder help --json` failed; is alder on PATH and recent enough?', vim.inspect(messages))
+  assert(not vim.uv.fs_stat(app .. '/app/Hello.alder'))
+end)
