@@ -31,15 +31,20 @@ function M.to_diagnostic(d)
 end
 
 -- set_qf replaces the quickfix list when the current one is alder check's, and otherwise
--- pushes a new one, so a list the user made is never overwritten.
+-- pushes a new one, so a list the user made is never overwritten. With no items and no
+-- current alder check list there is nothing to say, and the user's list stays current.
 local function set_qf(items)
-  local action = vim.fn.getqflist({ title = 0 }).title == QF_TITLE and 'r' or ' '
-  vim.fn.setqflist({}, action, { title = QF_TITLE, items = items })
+  local ours = vim.fn.getqflist({ title = 0 }).title == QF_TITLE
+  if not ours and #items == 0 then return end
+  vim.fn.setqflist({}, ours and 'r' or ' ', { title = QF_TITLE, items = items })
 end
 
 -- publish replaces the alder diagnostics of every loaded .alder buffer of the app (so a fixed
 -- file loses its old ones) and puts the diagnostics of files that are not open in the
 -- quickfix list. Paths are compared after resolving symlinks.
+-- Each buffer's b:changedtick is recorded in b:alder_check_tick when its diagnostics are set;
+-- a fix is only applied while the tick is unchanged (fix_at_cursor). `alder check` reads the
+-- saved file, so a buffer with unsaved changes gets no tick: its positions are already stale.
 function M.publish(app_root, objects)
   local app_real = real(app_root)
   local by_file = {}
@@ -59,6 +64,7 @@ function M.publish(app_root, objects)
         local p = real(name)
         open[p] = true
         vim.diagnostic.set(M.ns, buf, vim.tbl_map(M.to_diagnostic, by_file[p] or {}))
+        vim.b[buf].alder_check_tick = not vim.bo[buf].modified and vim.api.nvim_buf_get_changedtick(buf) or nil
       end
     end
   end
@@ -134,7 +140,8 @@ local function at_cursor(buf)
 end
 
 -- fix_at_cursor applies the fix of the diagnostic under the cursor (else the first one with a
--- fix on the cursor's line).
+-- fix on the cursor's line). It refuses when the buffer changed since the check published its
+-- diagnostics: the fix's range would land on the wrong bytes.
 function M.fix_at_cursor()
   local buf = vim.api.nvim_get_current_buf()
   local row = vim.api.nvim_win_get_cursor(0)[1] - 1
@@ -147,6 +154,10 @@ function M.fix_at_cursor()
   end
   if not pick then
     vim.notify('alder: no fix under the cursor', vim.log.levels.WARN)
+    return false
+  end
+  if vim.b[buf].alder_check_tick ~= vim.api.nvim_buf_get_changedtick(buf) then
+    vim.notify('alder: the fix no longer matches the buffer; save to re-check', vim.log.levels.ERROR)
     return false
   end
   local ok, err = M.apply_fix(buf, pick.user_data.fix)

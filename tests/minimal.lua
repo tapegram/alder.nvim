@@ -8,6 +8,7 @@ local data = here .. '/.tests'
 local bundled = vim.api.nvim_get_runtime_file('parser/markdown.so', false)[1]
 vim.opt.rtp = { here, ts, vim.env.VIMRUNTIME, bundled and vim.fn.fnamemodify(bundled, ':h:h') or nil }
 vim.opt.packpath = {}
+vim.g.loaded_netrwPlugin = 1 -- netrw's plugin needs a packpath
 vim.opt.swapfile = false
 vim.cmd('filetype plugin indent on')
 -- the dir must exist when it joins the runtimepath, or Neovim never scans it for the parser

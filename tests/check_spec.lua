@@ -73,6 +73,25 @@ test('check: the user\'s quickfix list is kept; alder check replaces only its ow
   assert(again.nr == 2 and again.title == 'alder check', 'a second check pushed another list: ' .. vim.inspect(again))
 end)
 
+-- Ruling S6 (fix round 1): a check with nothing for the quickfix list leaves the user's list
+-- current; it does not push an empty one.
+test('check: a check with no quickfix items leaves the user\'s list alone', function()
+  local app = fixture()
+  vim.fn.setqflist({}, 'f')
+  vim.fn.setqflist({}, ' ', { title = 'mine', items = { { filename = 'x', lnum = 1, text = 'keep me' } } })
+  local items = check.publish(app, {})
+  assert(#items == 0)
+  local cur = vim.fn.getqflist({ title = 0, nr = 0 })
+  local last = vim.fn.getqflist({ nr = '$' }).nr
+  assert(cur.title == 'mine' and cur.nr == 1 and last == 1, vim.inspect({ cur = cur, last = last }))
+  -- once alder check's list is current, an empty result does replace it (clears old errors)
+  check.publish(app, { { code = 'E0102', severity = 'error', file = 'app/Gone.alder', line = 1, col = 1,
+    message = 'm' } })
+  check.publish(app, {})
+  local ours = vim.fn.getqflist({ title = 0, nr = 0, size = 0 })
+  assert(ours.title == 'alder check' and ours.nr == 2 and ours.size == 0, vim.inspect(ours))
+end)
+
 -- Ruling C11: the window opens for an error in another file.
 test('check: open_qf opens the quickfix window for an error in another file', function()
   local app = fixture()
@@ -128,6 +147,7 @@ test('check: a late superseded result does not overwrite the newer one', functio
     table.insert(pending, on_done)
     return { kill = function() end }
   end
+  vim.diagnostic.set(check.ns, buf, { check.to_diagnostic({ code = 'E0102', line = 12, col = 25, message = 'old' }) })
   local first, second = false, false
   local ok, err = pcall(function()
     check.run(link, { on_done = function() first = true end })
@@ -196,10 +216,32 @@ test('fix: :AlderFix after multi-byte text lands on the right bytes', function()
   local d = check.to_diagnostic({ code = 'E0001', severity = 'error', line = 1, col = 16, endLine = 1, endCol = 20,
     message = 'm', fix = { line = 1, col = 16, endLine = 1, endCol = 20, replace = 'name' } })
   vim.diagnostic.set(check.ns, buf, { d })
+  vim.b[buf].alder_check_tick = vim.api.nvim_buf_get_changedtick(buf) -- as publish records it
   vim.api.nvim_win_set_cursor(0, { 1, 16 }) -- 0-based byte 16 is the `m` of `nmae`
   vim.cmd('AlderFix')
   assert(vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == 'x = "é→" ++ name',
     vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
+end)
+
+-- Fix round 1: positions are as of the last check. After an edit (a line inserted above the
+-- diagnostic) :AlderFix refuses instead of overwriting the wrong bytes.
+test('fix: :AlderFix refuses after the buffer changed since the check', function()
+  local app, file = fixture()
+  vim.cmd.edit(app .. '/' .. file)
+  local buf = vim.api.nvim_get_current_buf()
+  run_check(app)
+  assert(diags(buf, 'E0102')[1], 'no E0102')
+  vim.api.nvim_buf_set_lines(buf, 0, 0, false, { '-- a new first line' })
+  local before = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local d = diags(buf, 'E0102')[1] -- its extmark moved down a line; the fix's range did not
+  vim.api.nvim_win_set_cursor(0, { d.lnum + 1, d.col })
+  local messages, restore = H.capture_notify()
+  local ok = pcall(vim.cmd, 'AlderFix')
+  restore()
+  assert(ok)
+  assert(vim.deep_equal(vim.api.nvim_buf_get_lines(buf, 0, -1, false), before), 'the buffer changed')
+  assert(messages[1] and messages[1].msg == 'alder: the fix no longer matches the buffer; save to re-check',
+    vim.inspect(messages))
 end)
 
 test('fix: a stale fix is refused, not applied elsewhere', function()
