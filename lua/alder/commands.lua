@@ -9,12 +9,19 @@ local function version_of(cmd)
   return vim.trim(v.stdout or '')
 end
 
+-- decode_tree returns the command tree printed by `alder help --json`, or nil when stdout is
+-- not that JSON (an alder from before editor support exits 0 and prints text).
+function M.decode_tree(stdout)
+  local ok, t = pcall(vim.json.decode, stdout or '', { luanil = { object = true, array = true } })
+  if ok and type(t) == 'table' and type(t.commands) == 'table' then return t end
+end
+
 local function load(cmd)
   cache.failed = true
   local r = vim.system({ cmd, 'help', '--json' }, { text = true }):wait()
   if r.code ~= 0 then return end
-  local ok, t = pcall(vim.json.decode, r.stdout, { luanil = { object = true, array = true } })
-  if not ok or type(t) ~= 'table' then return end
+  local t = M.decode_tree(r.stdout)
+  if not t then return end
   cache.version, cache.tree, cache.failed = version_of(cmd), t, false
 end
 

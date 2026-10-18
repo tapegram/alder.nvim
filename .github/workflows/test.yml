@@ -1,0 +1,40 @@
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tapegram/alder
+          path: alder
+      - uses: actions/checkout@v4
+        with:
+          repository: nvim-treesitter/nvim-treesitter
+          ref: main
+          path: nvim-treesitter
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: alder/go.mod
+      - name: alder
+        run: |
+          go build -o "$RUNNER_TEMP/bin/alder" ./cmd/alder
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        working-directory: alder
+      - name: tree-sitter CLI
+        run: alder/.github/install-tree-sitter.sh
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      - name: tests
+        run: nvim --headless -u tests/minimal.lua -l tests/run.lua
+        env:
+          NVIM_TS: ${{ github.workspace }}/nvim-treesitter
+          ALDER_REPO: ${{ github.workspace }}/alder
