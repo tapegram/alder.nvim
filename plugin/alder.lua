@@ -30,6 +30,17 @@ vim.api.nvim_create_autocmd('BufWritePost', {
   end,
 })
 
+-- A file a plan created (b:alder_new) gets its directory on the first :w (R10).
+vim.api.nvim_create_autocmd('BufWritePre', {
+  group = group,
+  callback = function(ev)
+    if vim.b[ev.buf].alder_new then
+      vim.fn.mkdir(vim.fs.dirname(vim.api.nvim_buf_get_name(ev.buf)), 'p')
+      vim.b[ev.buf].alder_new = nil
+    end
+  end,
+})
+
 vim.api.nvim_create_user_command('AlderCheck', function()
   require('alder.check').for_current({ open_qf = true })
 end, { desc = 'alder check: diagnostics in buffers, other files in the quickfix list' })

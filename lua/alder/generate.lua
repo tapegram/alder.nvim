@@ -88,7 +88,7 @@ end
 -- refusal_list puts a refusal's diagnostics in a new quickfix list titled `alder <cmd>`. They
 -- describe the dry-run copy, not the buffers, so they are never published as diagnostics and
 -- the user's lists (and `alder check`'s) stay in the stack.
-local function refusal_list(app_root, fargs, diagnostics)
+function M.refusal_list(app_root, fargs, diagnostics)
   local items = {}
   for _, d in ipairs(diagnostics or {}) do
     table.insert(items, { filename = app_root .. '/' .. d.file, lnum = d.line, col = d.col,
@@ -129,7 +129,7 @@ function M.run(fargs, o)
     end
     if json.error then
       vim.notify(json.error, vim.log.levels.ERROR)
-      refusal_list(app_root, fargs, json.diagnostics)
+      M.refusal_list(app_root, fargs, json.diagnostics)
     elseif fargs[1] == 'fill' and vim.tbl_contains(fargs, '--list') then
       show_preview(app_root, fargs, json, { readonly = true })
     elseif asked_dry then
