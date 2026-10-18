@@ -1,0 +1,188 @@
+local cli = require('alder.cli')
+local root = require('alder.root')
+
+local M = {}
+M.ns = vim.api.nvim_create_namespace('alder')
+
+local QF_TITLE = 'alder check'
+
+local function real(p) return vim.uv.fs_realpath(p) or vim.fs.normalize(p) end
+
+-- severity maps a JSON `severity` to Neovim's: `warning` is WARN, anything else ERROR.
+function M.severity(s)
+  return s == 'warning' and vim.diagnostic.severity.WARN or vim.diagnostic.severity.ERROR
+end
+
+-- to_diagnostic maps one `alder check --json` object. Its columns are 1-based bytes with
+-- exclusive ends; Neovim's are 0-based bytes.
+function M.to_diagnostic(d)
+  local line, col = d.line or 1, d.col or 1
+  return {
+    lnum = line - 1,
+    col = col - 1,
+    end_lnum = (d.endLine or line) - 1,
+    end_col = (d.endCol or col) - 1,
+    severity = M.severity(d.severity),
+    message = d.message,
+    code = d.code,
+    source = 'alder',
+    user_data = { fix = d.fix },
+  }
+end
+
+-- set_qf replaces the quickfix list when the current one is alder check's, and otherwise
+-- pushes a new one, so a list the user made is never overwritten.
+local function set_qf(items)
+  local action = vim.fn.getqflist({ title = 0 }).title == QF_TITLE and 'r' or ' '
+  vim.fn.setqflist({}, action, { title = QF_TITLE, items = items })
+end
+
+-- publish replaces the alder diagnostics of every loaded .alder buffer of the app (so a fixed
+-- file loses its old ones) and puts the diagnostics of files that are not open in the
+-- quickfix list. Paths are compared after resolving symlinks.
+function M.publish(app_root, objects)
+  local app_real = real(app_root)
+  local by_file = {}
+  for _, d in ipairs(objects) do
+    if d.code and d.file then
+      local p = real(app_root .. '/' .. d.file)
+      by_file[p] = by_file[p] or {}
+      table.insert(by_file[p], d)
+    end
+  end
+  local open = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    local name = vim.api.nvim_buf_get_name(buf)
+    if vim.api.nvim_buf_is_loaded(buf) and name:match('%.alder$') then
+      local r = root.find(name)
+      if r and real(r) == app_real then
+        local p = real(name)
+        open[p] = true
+        vim.diagnostic.set(M.ns, buf, vim.tbl_map(M.to_diagnostic, by_file[p] or {}))
+      end
+    end
+  end
+  local items = {}
+  for p, ds in pairs(by_file) do
+    if not open[p] then
+      for _, d in ipairs(ds) do
+        table.insert(items, { filename = p, lnum = d.line, col = d.col, end_lnum = d.endLine, end_col = d.endCol,
+          text = d.code .. ' ' .. d.message,
+          type = M.severity(d.severity) == vim.diagnostic.severity.WARN and 'W' or 'E' })
+      end
+    end
+  end
+  table.sort(items, function(a, b)
+    if a.filename ~= b.filename then return a.filename < b.filename end
+    return a.lnum < b.lnum
+  end)
+  set_qf(items)
+  return items
+end
+
+local runs = {} -- real app root → the latest run { handle }
+
+-- run checks the app. A newer run for the same app (by real path) cancels the older one,
+-- whose result is then dropped even if it arrives.
+function M.run(app_root, o)
+  o = o or {}
+  local key = real(app_root)
+  local prev = runs[key]
+  if prev and prev.handle then pcall(function() prev.handle:kill('sigterm') end) end
+  local mine = {}
+  runs[key] = mine
+  local args = { 'check', '--json', app_root }
+  mine.handle = cli.run(args, { cwd = app_root }, function(res)
+    if runs[key] ~= mine then return end
+    runs[key] = nil
+    if res.code == 2 or (res.code ~= 0 and #res.objects == 0) or (res.json and res.json.error) then
+      cli.report(args, res)
+      return
+    end
+    local items = M.publish(app_root, res.objects)
+    if o.open_qf then
+      for _, item in ipairs(items) do
+        if item.type == 'E' then
+          vim.cmd('copen')
+          break
+        end
+      end
+    end
+    if o.on_done then o.on_done(res) end
+  end)
+  if not mine.handle and runs[key] == mine then runs[key] = nil end
+end
+
+-- apply_fix replaces the fix's byte range (1-based, exclusive end) with its text.
+function M.apply_fix(buf, fix)
+  local ok, err = pcall(vim.api.nvim_buf_set_text, buf, fix.line - 1, fix.col - 1, fix.endLine - 1, fix.endCol - 1,
+    vim.split(fix.replace, '\n', { plain = true }))
+  if not ok then return false, 'alder: the fix no longer matches the buffer; save to re-check (' .. tostring(err) .. ')' end
+  return true
+end
+
+local function at_cursor(buf)
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  row = row - 1
+  local here, line = nil, nil
+  for _, d in ipairs(vim.diagnostic.get(buf, { namespace = M.ns, lnum = row })) do
+    line = line or d
+    local ends = d.end_lnum > row or col < d.end_col or d.end_col == d.col
+    if col >= d.col and ends then here = here or d end
+  end
+  return here, line
+end
+
+-- fix_at_cursor applies the fix of the diagnostic under the cursor (else the first one with a
+-- fix on the cursor's line).
+function M.fix_at_cursor()
+  local buf = vim.api.nvim_get_current_buf()
+  local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+  local here = at_cursor(buf)
+  local pick = here and here.user_data and here.user_data.fix and here
+  if not pick then
+    for _, d in ipairs(vim.diagnostic.get(buf, { namespace = M.ns, lnum = row })) do
+      if d.user_data and d.user_data.fix then pick = d break end
+    end
+  end
+  if not pick then
+    vim.notify('alder: no fix under the cursor', vim.log.levels.WARN)
+    return false
+  end
+  local ok, err = M.apply_fix(buf, pick.user_data.fix)
+  if not ok then vim.notify(err, vim.log.levels.ERROR) end
+  return ok
+end
+
+-- explain shows `alder explain <code>` for the given code or the diagnostic under the cursor.
+function M.explain(code)
+  if not code or code == '' then
+    local here, line = at_cursor(vim.api.nvim_get_current_buf())
+    local d = here or line
+    code = d and d.code
+  end
+  if not code then
+    vim.notify('alder: no diagnostic under the cursor', vim.log.levels.WARN)
+    return
+  end
+  cli.run({ 'explain', code }, { cwd = vim.fn.getcwd() }, function(res)
+    if res.code ~= 0 then
+      cli.report({ 'explain', code }, res, { bug_on_2 = false })
+      return
+    end
+    vim.lsp.util.open_floating_preview(vim.split(vim.trim(res.stdout), '\n', { plain = true }), 'markdown',
+      { border = 'rounded', max_width = 80, focus_id = 'alder-explain' })
+  end)
+end
+
+-- for_current runs a check for the current buffer's app, or says there is none.
+function M.for_current(o)
+  local r = root.for_buf(0)
+  if not r then
+    vim.notify('alder: no `app/` directory above this file', vim.log.levels.ERROR)
+    return
+  end
+  M.run(r, o)
+end
+
+return M

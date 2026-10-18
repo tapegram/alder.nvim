@@ -4,7 +4,9 @@
 local here = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p:h:h')
 local ts = os.getenv('NVIM_TS') or vim.fn.expand('~/.local/share/nvim/lazy/nvim-treesitter')
 local data = here .. '/.tests'
-vim.opt.rtp = { here, ts, vim.env.VIMRUNTIME }
+-- Neovim's bundled parsers (markdown for :AlderExplain's float) live outside $VIMRUNTIME
+local bundled = vim.api.nvim_get_runtime_file('parser/markdown.so', false)[1]
+vim.opt.rtp = { here, ts, vim.env.VIMRUNTIME, bundled and vim.fn.fnamemodify(bundled, ':h:h') or nil }
 vim.opt.packpath = {}
 vim.opt.swapfile = false
 vim.cmd('filetype plugin indent on')
