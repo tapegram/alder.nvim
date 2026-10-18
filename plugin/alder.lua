@@ -64,3 +64,51 @@ end, {
   complete = function(arglead, cmdline) return require('alder.commands').complete(arglead, cmdline) end,
   desc = 'run alder <command>: generators preview their diff first',
 })
+
+vim.api.nvim_create_user_command('AlderActions', function()
+  require('alder.actions').open()
+end, { desc = 'alder code actions at the cursor: fixes and generators' })
+
+local STATIC_IDS = { 'new form', 'new msg', 'new decl', 'new test', 'edit page', 'remove page', 'new page', 'new table', 'new capability', 'new admin', 'new auth', 'new type', 'new silo', 'edit table', 'edit decl', 'edit auth', 'edit session', 'remove table', 'regen admin' }
+
+-- generator_ids completes :AlderGenerate from the server's list, else from a static one.
+local function generator_ids()
+  local buf = vim.api.nvim_get_current_buf()
+  local c = require('alder.lsp').client(buf)
+  if c then
+    local pos = vim.api.nvim_win_get_cursor(0)
+    local res = c:request_sync('alder/generators', {
+      textDocument = { uri = vim.uri_from_bufnr(buf) },
+      position = { line = pos[1] - 1, character = pos[2] },
+    }, 1000, buf)
+    if res and res.result and res.result.generators then
+      return vim.tbl_map(function(g) return g.id end, res.result.generators)
+    end
+  end
+  return STATIC_IDS
+end
+
+vim.api.nvim_create_user_command('AlderGenerate', function(o)
+  require('alder.flow').pick(vim.api.nvim_get_current_buf(), vim.trim(o.args))
+end, {
+  nargs = '*', -- ids have spaces: `new msg`
+  complete = function(_, cmdline)
+    local typed = cmdline:gsub('^%S+%s+', '')
+    local out = {}
+    for _, id in ipairs(generator_ids()) do
+      if vim.startswith(id, typed) then
+        -- the command line completes its last word, so offer the id from there on
+        local done = typed:match('^.*%s') or ''
+        table.insert(out, id:sub(#done + 1))
+      end
+    end
+    return out
+  end,
+  desc = 'alder generate [id]: pick a generator, fill its fields, preview, apply',
+})
+
+-- Neovim's own code action menu (gra) runs a generator action through this client command (R8).
+vim.lsp.commands['alder.generate'] = function(cmd, ctx)
+  local g = cmd.arguments[1]
+  require('alder.flow').open(ctx.bufnr, g.id, g.sets)
+end
