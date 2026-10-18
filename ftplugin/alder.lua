@@ -19,6 +19,28 @@ if pcall(vim.treesitter.start) then
   end
 end
 
+-- gf on `import Posts.Index` opens <root>/app/Posts/Index.alder
+vim.bo.include = [[^\s*import\>]]
+vim.bo.includeexpr = "v:lua.require'alder.ftplugin'.include(v:fname)"
+vim.bo.suffixesadd = '.alder'
+local root = require('alder.root').for_buf(0)
+if root then vim.bo.path = root .. '/app,.' end
+
+-- :make runs alder check on the project root; the root is entered first so the file
+-- names (relative to it) resolve in the quickfix list whatever the cwd
+local dir = root or vim.fn.getcwd()
+vim.bo.makeprg = ('(echo "Entering directory %s"; %s check %s)'):format(vim.fn.escape(dir, '"\\$`%#'),
+  vim.fn.shellescape(require('alder.config').options.cmd), vim.fn.shellescape(dir))
+vim.bo.errorformat = table.concat({
+  [[%DEntering directory %f]],
+  [=[%f:%l:%c: %t%*[a-z][%*[A-Z]%n]: %m]=],
+  [[%-G%.%#]], -- context, caret, fix and blank lines
+}, ',')
+
+-- % jumps between <div> and </div> (matchit ships with Neovim)
+vim.b.match_ignorecase = 0
+vim.b.match_words = [[<:>,<\@<=\([^/!][^ \t>]*\)[^>]*\%(>\|$\):<\@<=/\1>]]
+
 vim.b.undo_ftplugin = (vim.b.undo_ftplugin and (vim.b.undo_ftplugin .. ' | ') or '')
-  .. 'setl commentstring< comments< shiftwidth< tabstop< softtabstop< expandtab< autoread< indentexpr<'
-  .. ' | unlet! b:did_ftplugin_alder'
+  .. 'setl commentstring< comments< shiftwidth< tabstop< softtabstop< expandtab< autoread< indentexpr< include< includeexpr< suffixesadd< path< makeprg< errorformat<'
+  .. ' | unlet! b:did_ftplugin_alder b:match_words b:match_ignorecase'

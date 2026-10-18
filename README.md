@@ -3,7 +3,8 @@
 Neovim support for [Alder](https://github.com/tapegram/alder): highlighting, indentation,
 folds and textobjects from Alder's tree-sitter grammar; `alder check` diagnostics on save, with
 the compiler's fixes; and the code generators (`alder new`, `edit`, `remove`, `regen`, `fill`)
-with a preview of the diff before anything is written.
+with a preview of the diff before anything is written. In `.alder` buffers `gf` follows an
+`import` to its file, `:make` runs `alder check` into the quickfix list, and `%` jumps between HTML tags.
 
 The plugin never rewords the compiler: what you see is what `alder` printed.
 
