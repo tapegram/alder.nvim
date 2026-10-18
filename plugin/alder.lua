@@ -46,3 +46,7 @@ end, {
 vim.api.nvim_create_user_command('AlderNew', function()
   require('alder.generate').new_interactive()
 end, { desc = 'pick a generator, type its arguments, preview, apply' })
+
+vim.api.nvim_create_user_command('AlderFill', function(o)
+  require('alder.fill').fill(o.bang)
+end, { bang = true, desc = 'fill the typed hole under the cursor (! replaces the whole declaration body)' })
