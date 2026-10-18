@@ -24,9 +24,6 @@ function M.start(buf)
     on_attach = function(_, b) vim.b[b].alder_lsp = true end,
     on_exit = function(code, signal)
       vim.schedule(function()
-        for _, b in ipairs(vim.api.nvim_list_bufs()) do
-          if vim.api.nvim_buf_is_valid(b) then vim.b[b].alder_lsp = nil end
-        end
         if not leaving and (code ~= 0 or signal ~= 0) then
           vim.notify('alder lsp stopped — :checkhealth alder', vim.log.levels.WARN)
         end

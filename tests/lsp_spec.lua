@@ -81,6 +81,7 @@ test('lsp: a killed server is reported once', function()
   require('alder.lsp').client(buf):stop(true)
   H.wait(3000, function() return #messages > 0 end)
   restore()
+  assert(H.wait(3000, function() return not vim.b[buf].alder_lsp end), 'b:alder_lsp still set after the server died')
   local n = 0
   for _, m in ipairs(messages) do if m.msg == 'alder lsp stopped — :checkhealth alder' then n = n + 1 end end
   assert(n == 1, vim.inspect(messages))
