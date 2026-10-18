@@ -56,10 +56,16 @@ function M.submit(buf)
 end
 
 local function open_scratch(app_root, hole, bang)
-  local name = 'alder://fill/' .. M.address(hole)
-  -- a buffer already holding the name would make set_name fail: wipe it so the new one gets it
-  local old = vim.fn.bufnr('^' .. vim.fn.escape(name, '\\.[]*~$^') .. '$')
-  if old ~= -1 then pcall(vim.api.nvim_buf_delete, old, { force = true }) end
+  -- a hole has its own scratch; the whole-declaration (bang) one is named by the address alone
+  local name = 'alder://fill/' .. M.address(hole) .. (bang and '' or ('/?' .. hole.name))
+  -- reopening a hole whose scratch is still open goes back to it, keeping the typed text
+  local old = cli.buf_named(name)
+  if old and scratches[old] then
+    local win = vim.fn.bufwinid(old)
+    if win ~= -1 then vim.api.nvim_set_current_win(win) else vim.cmd('botright sbuffer ' .. old) end
+    return
+  end
+  if old then pcall(vim.api.nvim_buf_delete, old, { force = true }) end
   vim.cmd('botright new')
   local buf = vim.api.nvim_get_current_buf()
   vim.bo[buf].buftype = 'acwrite'
