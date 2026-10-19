@@ -36,6 +36,12 @@ function M.check()
     if #status == 0 then h.info('no alder lsp running (open an .alder file inside an app)') end
   end
 
+  if require('alder.ui').has_nui() then
+    h.ok('nui.nvim (the generator modal, <leader>ag)')
+  else
+    h.warn('nui.nvim is not installed: <leader>ag and :AlderGenerate need it (MunifTanjim/nui.nvim)')
+  end
+
   if vim.fn.executable('tree-sitter') == 1 then
     local v = vim.system({ 'tree-sitter', '--version' }, { text = true }):wait()
     local version = (v.stdout or ''):match('(%d+%.%d+%.%d+)')

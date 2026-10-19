@@ -3,10 +3,12 @@
 -- alder checkout whose tree-sitter-alder/ is installed as the parser (default ~/projects/alder).
 local here = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p:h:h')
 local ts = os.getenv('NVIM_TS') or vim.fn.expand('~/.local/share/nvim/lazy/nvim-treesitter')
+-- NVIM_NUI points at a nui.nvim checkout (default: the lazy.nvim one); the generator modal needs it
+local nui = os.getenv('NVIM_NUI') or vim.fn.expand('~/.local/share/nvim/lazy/nui.nvim')
 local data = here .. '/.tests'
 -- Neovim's bundled parsers (markdown for :AlderExplain's float) live outside $VIMRUNTIME
 local bundled = vim.api.nvim_get_runtime_file('parser/markdown.so', false)[1]
-vim.opt.rtp = { here, ts, vim.env.VIMRUNTIME, bundled and vim.fn.fnamemodify(bundled, ':h:h') or nil }
+vim.opt.rtp = { here, ts, nui, vim.env.VIMRUNTIME, bundled and vim.fn.fnamemodify(bundled, ':h:h') or nil }
 vim.opt.packpath = { vim.env.VIMRUNTIME } -- where matchit lives
 vim.g.loaded_netrwPlugin = 1 -- netrw's plugin needs a packpath
 vim.opt.swapfile = false

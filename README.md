@@ -27,7 +27,7 @@ lazy.nvim:
 {
   'tapegram/alder.nvim',
   lazy = false, -- it is small, and it must register the parser before :TSInstall
-  dependencies = { 'nvim-treesitter/nvim-treesitter' },
+  dependencies = { 'MunifTanjim/nui.nvim', 'nvim-treesitter/nvim-treesitter' },
   opts = {},
 }
 ```
@@ -37,7 +37,12 @@ AstroNvim, `lua/plugins/alder.lua`:
 ```lua
 ---@type LazySpec
 return {
-  { 'tapegram/alder.nvim', lazy = false, opts = {} },
+  {
+    'tapegram/alder.nvim',
+    lazy = false,
+    dependencies = { 'MunifTanjim/nui.nvim' },
+    opts = {},
+  },
   {
     'AstroNvim/astrocore',
     opts = function(_, opts)
@@ -176,7 +181,8 @@ nvim --headless -u tests/minimal.lua -l tests/run.lua          # all tests
 nvim --headless -u tests/minimal.lua -l tests/run.lua keys     # tests whose name contains "keys"
 ```
 
-`NVIM_TS` points at an nvim-treesitter checkout (default: lazy.nvim's) and `ALDER_REPO` at an
+`NVIM_TS` points at an nvim-treesitter checkout and `NVIM_NUI` at a nui.nvim one (defaults:
+lazy.nvim's), and `ALDER_REPO` at an
 alder checkout (default `~/projects/alder`); `alder` and `tree-sitter` must be on `PATH`.
 
 ## License
