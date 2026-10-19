@@ -1,14 +1,14 @@
 local M = {}
 
 M.actions = {
-  actions = function() require('alder.actions').open() end,
+  generate = function() require('alder.modal').open(0) end,
   diagnostics = function() vim.diagnostic.setqflist({ title = 'alder diagnostics', open = true }) end,
   explain = function() require('alder.check').explain() end,
   run = function() require('alder.commands').alder({ 'run' }) end,
 }
 
 local DESC = {
-  actions = 'alder: actions',
+  generate = 'alder: generate (the generator modal)',
   diagnostics = 'alder: diagnostics to quickfix',
   explain = 'alder: explain the diagnostic',
   run = 'alder: run',

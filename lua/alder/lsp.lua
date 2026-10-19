@@ -37,20 +37,25 @@ function M.client(buf)
 end
 
 -- request sends method to buf's server. cb gets the result; an error is shown once with the
--- server's own message, and a cancelled request (-32800) shows nothing.
-function M.request(buf, method, params, cb)
+-- server's own message (a cancelled request, -32800, shows nothing) and on_err(err), when
+-- given, runs after it so a caller can clear its "updating" state.
+function M.request(buf, method, params, cb, on_err)
   local c = M.client(buf)
   if not c then
     vim.notify('alder: the language server is not attached (:checkhealth alder)', vim.log.levels.WARN)
+    if on_err then on_err({ message = 'not attached' }) end
     return
   end
-  c:request(method, params, function(err, result)
+  local sent = c:request(method, params, function(err, result)
     if err then
       if err.code ~= -32800 then vim.notify(err.message, vim.log.levels.ERROR) end
+      if on_err then on_err(err) end
       return
     end
     cb(result)
   end, buf)
+  -- false: the server is closing and the handler will never run (its exit is reported by on_exit)
+  if not sent and on_err then on_err({ message = 'alder lsp stopped — :checkhealth alder' }) end
 end
 
 function M.status()

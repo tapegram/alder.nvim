@@ -45,6 +45,17 @@ function H.capture_notify()
   return messages, function() vim.notify = orig end
 end
 
+-- float_text is the text of every floating window's buffer, newline-joined.
+function H.float_text()
+  local out = {}
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_config(w).relative ~= '' then
+      vim.list_extend(out, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false))
+    end
+  end
+  return table.concat(out, '\n')
+end
+
 -- new_app runs `alder new <dir>/demo` and returns the app root.
 function H.new_app()
   local root = H.tmpdir() .. '/demo'

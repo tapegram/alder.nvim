@@ -65,10 +65,6 @@ end, {
   desc = 'run alder <command>: generators preview their diff first',
 })
 
-vim.api.nvim_create_user_command('AlderActions', function()
-  require('alder.actions').open()
-end, { desc = 'alder code actions at the cursor: fixes and generators' })
-
 local STATIC_IDS = { 'new form', 'new msg', 'new decl', 'new test', 'edit page', 'remove page', 'new page', 'new table', 'new capability', 'new admin', 'new auth', 'new type', 'new silo', 'edit table', 'edit decl', 'edit auth', 'edit session', 'remove table', 'regen admin' }
 
 -- generator_ids completes :AlderGenerate from the server's list, else from a static one.
@@ -89,7 +85,8 @@ local function generator_ids()
 end
 
 vim.api.nvim_create_user_command('AlderGenerate', function(o)
-  require('alder.flow').pick(vim.api.nvim_get_current_buf(), vim.trim(o.args))
+  local id = vim.trim(o.args)
+  require('alder.modal').open(vim.api.nvim_get_current_buf(), { generator = id ~= '' and id or nil })
 end, {
   nargs = '*', -- ids have spaces: `new msg`
   complete = function(_, cmdline)
@@ -104,11 +101,12 @@ end, {
     end
     return out
   end,
-  desc = 'alder generate [id]: pick a generator, fill its fields, preview, apply',
+  desc = 'alder generate [id]: the generator modal — search, form, live preview, apply',
 })
 
--- Neovim's own code action menu (gra) runs a generator action through this client command (R8).
+-- Neovim's own code action menu (gra) runs a generator action through this client command: the
+-- modal opens preset with the generator and the values the server filled from the cursor.
 vim.lsp.commands['alder.generate'] = function(cmd, ctx)
-  local g = cmd.arguments[1]
-  require('alder.flow').open(ctx.bufnr, g.id, g.sets)
+  local g = require('alder.ui').plain(cmd.arguments[1])
+  require('alder.modal').open(ctx.bufnr, { generator = g.id, sets = g.sets })
 end
