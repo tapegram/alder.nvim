@@ -33,9 +33,12 @@ end)
 
 test('ui: narrow below 100 columns', function()
   local cols = vim.o.columns
-  vim.o.columns = 80
-  assert(ui.narrow())
-  vim.o.columns = 140
-  assert(not ui.narrow())
+  local ok, err = pcall(function()
+    vim.o.columns = 80
+    assert(ui.narrow())
+    vim.o.columns = 140
+    assert(not ui.narrow())
+  end)
   vim.o.columns = cols
+  assert(ok, err)
 end)

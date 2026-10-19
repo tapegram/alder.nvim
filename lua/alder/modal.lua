@@ -58,6 +58,13 @@ local function render_list()
   s.popups.list.border:set_text('bottom', (' %d of %d '):format(#s.filtered, #s.items), 'right')
   if #s.filtered > 0 and vim.api.nvim_win_is_valid(s.win.list) then
     pcall(vim.api.nvim_win_set_cursor, s.win.list, { s.selected, 0 })
+    -- a heading above row 1 is only drawn when topfill says so (setting the cursor resets it)
+    if headings[1] and headings[1].row == 1 then
+      vim.api.nvim_win_call(s.win.list, function()
+        local v = vim.fn.winsaveview()
+        if v.topline == 1 then vim.fn.winrestview({ topline = 1, topfill = 1 }) end
+      end)
+    end
   end
 end
 
@@ -188,6 +195,14 @@ local function mount()
     end)
   end
   M.form_keys()
+  -- no completion popups over the search and form lines: they would take <CR>, <Tab> and <Down>
+  for _, name in ipairs({ 'search', 'form' }) do
+    local b = s.bufs[name]
+    vim.b[b].completion = false -- blink.cmp
+    vim.api.nvim_buf_call(b, function()
+      pcall(function() require('cmp').setup.buffer({ enabled = false }) end) -- nvim-cmp
+    end)
+  end
   vim.api.nvim_set_current_win(s.win.search)
   vim.cmd.startinsert()
 end
@@ -434,6 +449,8 @@ function M.on_cursor_moved()
     s.focus, s.moved = row, false
     s.pick = start_pick(s, s.fields[row])
     render_form()
+    -- a switch row is toggled with <Space> in normal mode
+    if s.fields[row].kind == 'bool' then vim.cmd.stopinsert() end
   end
 end
 
@@ -549,6 +566,7 @@ function M.enter()
   local s = M.state
   local sel = M.selected()
   if not s or not sel then return end
+  M.on_form_changed() -- a keystroke still unread counts
   M.commit_option()
   if s.updating then return end
   if not s.ready then
@@ -564,6 +582,7 @@ function M.review()
   local s = M.state
   local sel = M.selected()
   if not s or not sel then return end
+  M.on_form_changed() -- a keystroke still unread counts
   M.commit_option()
   local planned = sets_payload(s)
   request(s.buf, 'alder/plan', params(s, { id = sel.id, sets = planned }), function(plan)

@@ -34,7 +34,7 @@ function M.model(plan)
 end
 
 local function title(id, m)
-  return (id or 'plan') .. (m.can_apply and '  <CR> apply · Esc back' or '  ✗ cannot apply · q close')
+  return (id or 'plan') .. (m.can_apply and '  <CR> apply · Esc back' or '  ✗ cannot apply · q back')
 end
 
 local function fill(buf, lines)

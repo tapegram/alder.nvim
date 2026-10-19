@@ -62,7 +62,7 @@ Then `:TSInstall alder`, and `:checkhealth alder`.
 require('alder').setup({
   cmd = 'alder',        -- the alder binary
   check_on_save = true, -- run alder check after writing an .alder file
-  preview = true,       -- generators show their diff first; <CR> applies, q discards
+  preview = true,       -- the `:Alder` CLI path shows the diff first; <CR> applies, q discards (not the modal)
   lsp = true,           -- start `alder lsp` for .alder buffers; false keeps CLI mode
   keys = {              -- buffer-local maps in .alder files; each can be false
     generate = '<leader>ag',

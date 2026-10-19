@@ -43,10 +43,10 @@ test('review: open shows notes, files and the diff; q goes back, <CR> applies', 
   assert(applied and H.float_text() == '')
 end)
 
-test('review: cannot apply → <CR> does nothing, q closes', function()
+test('review: cannot apply → <CR> does nothing, q goes back', function()
   local applied = false
   review.open({ error = 'nope', files = {}, diagnostics = {} }, { id = 'new page', on_apply = function() applied = true end, on_back = function() end })
-  assert(H.float_text():find('✗ cannot apply · q close', 1, true), H.float_text())
+  assert(H.float_text():find('✗ cannot apply · q back', 1, true), H.float_text())
   vim.api.nvim_feedkeys(vim.keycode('<CR>'), 'x', false)
   assert(not applied and H.float_text() ~= '')
   vim.api.nvim_feedkeys('q', 'x', false)

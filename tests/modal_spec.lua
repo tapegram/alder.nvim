@@ -45,6 +45,9 @@ test('modal: opens with the panes titled, here group first, search focused', fun
     assert(vim.deep_equal(heads, { '── here ──', '── all ──' }), vim.inspect(heads))
     assert(#s.items >= 19 and s.items[1].here and s.filtered[1].id == s.items[1].id, vim.inspect(s.items[1]))
     assert(vim.api.nvim_get_current_win() == s.win.search)
+    -- the `here` heading is drawn only when the list window shows one filler line above row 1
+    local topfill = vim.api.nvim_win_call(s.win.list, function() return vim.fn.winsaveview().topfill end)
+    assert(topfill == 1, 'the here heading is not shown: topfill = ' .. tostring(topfill))
     assert(text:find((' %d of %d '):format(#s.items, #s.items), 1, true), text)
   end)
 end)
@@ -417,5 +420,49 @@ test('modal: a bool flag renders as a switch; Space toggles it into the sets', f
     assert(r and line(r) == '[ ] example', vim.inspect(vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false)))
     assert(f.value == '' and f.source ~= 'default', vim.inspect(f))
     assert(form.sets(s.preset, s.typed).example == nil)
+  end)
+end)
+
+test('modal: arrowing onto a switch row leaves insert mode so Space toggles', function()
+  sized(140, function()
+    local buf = blog_buf('app/Posts/Index.alder')
+    local s = open(buf)
+    modal.type_query('new page')
+    wait_preview(s)
+    local brow
+    for i, f in ipairs(s.fields) do
+      if f.kind == 'bool' then brow = i break end
+    end
+    assert(brow and brow > 1, 'new page needs a text field above a switch')
+    -- the headless loop never applies :startinsert, so watch for the :stopinsert instead
+    modal.focus_field(brow - 1)
+    local stops, orig = 0, vim.cmd.stopinsert
+    vim.cmd.stopinsert = function(...) stops = stops + 1 return orig(...) end
+    local ok, err = pcall(function()
+      vim.api.nvim_win_set_cursor(s.win.form, { brow - 1, 0 })
+      modal.on_cursor_moved()
+      assert(stops == 0, 'left insert for a text field')
+      vim.api.nvim_win_set_cursor(s.win.form, { brow, 0 })
+      modal.on_cursor_moved()
+      assert(stops == 1, 'did not leave insert on the switch row: ' .. stops)
+    end)
+    vim.cmd.stopinsert = nil
+    assert(ok, err)
+  end)
+end)
+
+test('modal: a request the closing server refuses clears updating and says why', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    local c = require('alder.lsp').client(s.buf)
+    local orig = c.request
+    c.request = function() return false end
+    local ok, err = pcall(function()
+      modal.set_field('name', 'Delete')
+      assert(H.wait(2000, function() return not s.updating end), 'updating stuck')
+    end)
+    c.request = orig
+    assert(ok, err)
+    assert(text_of(s.bufs.preview):find('alder lsp stopped', 1, true), text_of(s.bufs.preview))
   end)
 end)

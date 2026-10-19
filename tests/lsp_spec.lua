@@ -86,3 +86,17 @@ test('lsp: a killed server is reported once', function()
   for _, m in ipairs(messages) do if m.msg == 'alder lsp stopped — :checkhealth alder' then n = n + 1 end end
   assert(n == 1, vim.inspect(messages))
 end)
+
+test('lsp: a request the closing client refuses calls on_err, never cb', function()
+  local root = blog()
+  vim.cmd.edit(root .. '/app/Post.alder')
+  local buf = vim.api.nvim_get_current_buf()
+  assert(attached(buf))
+  local c = require('alder.lsp').client(buf)
+  local orig = c.request
+  c.request = function() return false end
+  local got, called = nil, false
+  require('alder.lsp').request(buf, 'alder/generators', {}, function() called = true end, function(err) got = err end)
+  c.request = orig
+  assert(not called and got and got.message == 'alder lsp stopped — :checkhealth alder', vim.inspect(got))
+end)

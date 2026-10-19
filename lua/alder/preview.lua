@@ -25,7 +25,9 @@ function M.render(r)
   end
   if #lines > 0 and ((r.diff and r.diff ~= '') or #(r.holes or {}) > 0) then add(string.rep('─', 40), 'Comment') end
   if r.diff and r.diff ~= '' then
-    for _, l in ipairs(vim.split(r.diff, '\n', { plain = true })) do add(l) end
+    local dl = vim.split(r.diff, '\n', { plain = true })
+    if dl[#dl] == '' then table.remove(dl) end
+    for _, l in ipairs(dl) do add(l) end
   end
   for _, h in ipairs(r.holes or {}) do add(('? %s : %s'):format(h.name, h.type), 'Comment') end
   return lines, hls
