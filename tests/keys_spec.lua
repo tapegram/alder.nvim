@@ -70,6 +70,8 @@ test('commands: AlderActions is gone; AlderGenerate [id] presets the modal', fun
   assert(H.wait(5000, function() return modal.state ~= nil and modal.state.bufs ~= nil end))
   assert(modal.selected().id == 'new msg')
   modal.close()
+  local comp = vim.fn.getcompletion('AlderGenerate new m', 'cmdline')
+  assert(vim.tbl_contains(comp, 'msg') or vim.tbl_contains(comp, 'new msg'), vim.inspect(comp))
 end)
 
 test('commands: the alder.generate client command opens the modal on that generator, focus on the first missing field', function()

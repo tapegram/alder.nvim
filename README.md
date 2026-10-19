@@ -65,7 +65,7 @@ require('alder').setup({
   preview = true,       -- generators show their diff first; <CR> applies, q discards
   lsp = true,           -- start `alder lsp` for .alder buffers; false keeps CLI mode
   keys = {              -- buffer-local maps in .alder files; each can be false
-    actions = '<leader>aa',
+    generate = '<leader>ag',
     diagnostics = '<leader>ac',
     explain = '<leader>ae',
     run = '<leader>ar',
@@ -89,8 +89,7 @@ run so the grammar matches your compiler.
 | `:AlderCheck` | `alder check`: diagnostics in open buffers, other files in the quickfix list |
 | `:AlderFix` | apply the compiler's fix for the diagnostic under the cursor |
 | `:AlderExplain [code]` | `alder explain` for the code (default: the diagnostic under the cursor) |
-| `:AlderActions` | the code actions at the cursor: the compiler's fixes, then the generators (`<leader>aa`) |
-| `:AlderGenerate [id]` | pick any generator (`new msg`, `edit table`, ...) and answer its fields; those that apply at the cursor come first |
+| `:AlderGenerate [id]` | open the generator modal (preset to `id`): search the generators, fill the form, watch the preview, `<CR>` applies, `<C-o>` reviews |
 | `:AlderDiagnostics` | the buffers' diagnostics in the quickfix list (`<leader>ac`) |
 | `:Alder <args…>` | any `alder` command, with completion; it writes to disk through the CLI |
 
@@ -100,15 +99,17 @@ In `.alder` buffers:
 
 | Key | What it does |
 |---|---|
-| `<leader>aa` | code actions at the cursor: fixes first, then generators |
+| `<leader>ag` | the generator modal |
 | `<leader>ac` | diagnostics to the quickfix list |
 | `<leader>ae` | explain the diagnostic under the cursor |
 | `<leader>ar` | `alder run` |
 
 Each can be set to `false` in `opts.keys`. With which-key, `<leader>a` is the group "alder".
 
+Fixes and the generators that apply at the cursor are in Neovim's own code-action menu (`gra`); picking a generator there opens the modal preset.
+
 Neovim maps these LSP keys itself (0.11+): `K` hover, `grr` references, `gra` code actions
-(it opens the same flow as `<leader>aa`), `<C-]>` go to definition through the LSP `tagfunc`.
+(fixes and generators; a generator opens the modal), `<C-]>` go to definition through the LSP `tagfunc`.
 It does **not** map `gd`; add it if you want it:
 
 ```lua
@@ -141,8 +142,13 @@ no server to answer says `alder: the language server is not attached (:checkheal
 
 ## Applying generators
 
-`<leader>aa` (or `gra`, or `:AlderGenerate`) asks for the generator's remaining fields, shows
-the diff, and on `<CR>` applies it; `q` discards. The server plans the change on a copy of
+`<leader>ag` (or `:AlderGenerate`, or a generator from `gra`) opens the generator modal: a
+search line over the generators (those that apply at the cursor first), the chosen
+generator's form, and a live preview of the diff that updates as you type. `<Tab>` moves
+between fields, `<CR>` applies when every field is valid (else it jumps to the first that is
+not), `<C-o>` opens the full review (what the plan leaves to you, file by file), `<Esc>`
+closes. The modal needs [nui.nvim](https://github.com/MunifTanjim/nui.nvim); without it,
+`<leader>ag` says so and `:Alder <words>` still runs the CLI. The server plans the change on a copy of
 your app, built from your buffers, and the plugin puts the result into **buffers**:
 
 - Nothing is written until you save. `:w` saves one file, `:wall` all of them; `u` undoes an
