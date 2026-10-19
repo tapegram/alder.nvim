@@ -31,13 +31,13 @@ local function break_per_page()
   return buf, l
 end
 
-test('keys: aa ac ae ar are buffer-local, ag is not (plan 2)', function()
+test('keys: ag ac ae ar are buffer-local; aa is gone (plan 2)', function()
   vim.g.mapleader = ' '
   blog_buf('app/Post.alder')
-  for _, k in ipairs({ '<leader>aa', '<leader>ac', '<leader>ae', '<leader>ar' }) do
+  for _, k in ipairs({ '<leader>ag', '<leader>ac', '<leader>ae', '<leader>ar' }) do
     assert(mapped(k), k .. ' not mapped')
   end
-  assert(not mapped('<leader>ag'))
+  assert(not mapped('<leader>aa'))
 end)
 
 test('keys: false disables one key', function()
@@ -45,8 +45,49 @@ test('keys: false disables one key', function()
   with_opts({ keys = { run = false } }, function()
     blog_buf('app/Post.alder')
     assert(not mapped('<leader>ar'))
-    assert(mapped('<leader>aa'))
+    assert(mapped('<leader>ag'))
   end)
+end)
+
+test('keys: ag opens the generator modal', function()
+  vim.g.mapleader = ' '
+  local buf = blog_buf('app/Posts/Index.alder')
+  H.wait(1500, function() return false end)
+  vim.api.nvim_feedkeys(vim.keycode('<leader>ag'), 'x', false)
+  local modal = require('alder.modal')
+  assert(H.wait(5000, function() return modal.state ~= nil and modal.state.bufs ~= nil end), 'modal did not open')
+  assert(modal.state.buf == buf)
+  modal.close()
+end)
+
+test('commands: AlderActions is gone; AlderGenerate [id] presets the modal', function()
+  assert(vim.fn.exists(':AlderActions') == 0)
+  assert(vim.fn.exists(':AlderGenerate') == 2)
+  blog_buf('app/Posts/Index.alder')
+  H.wait(1500, function() return false end)
+  vim.cmd('AlderGenerate new msg')
+  local modal = require('alder.modal')
+  assert(H.wait(5000, function() return modal.state ~= nil and modal.state.bufs ~= nil end))
+  assert(modal.selected().id == 'new msg')
+  modal.close()
+end)
+
+test('commands: the alder.generate client command opens the modal on that generator, focus on the first missing field', function()
+  local buf = blog_buf('app/Posts/Index.alder')
+  vim.fn.search('load params')
+  vim.lsp.commands['alder.generate']({ command = 'alder.generate', arguments = { { id = 'new msg', sets = { page = 'Posts.Index' } } } },
+    { bufnr = buf })
+  local modal = require('alder.modal')
+  assert(H.wait(5000, function() return modal.state ~= nil and modal.state.bufs ~= nil end), 'modal did not open')
+  local s = modal.state
+  assert(modal.selected().id == 'new msg')
+  assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end), 'no preview')
+  local first
+  for i, f in ipairs(s.fields) do
+    if f.required and (f.value == nil or f.value == '') then first = i break end
+  end
+  assert(first and s.focus == first, 'focus ' .. tostring(s.focus) .. ' want ' .. tostring(first))
+  modal.close()
 end)
 
 test('keys: ac fills the quickfix list from server diagnostics and opens it', function()

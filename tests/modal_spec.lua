@@ -385,3 +385,37 @@ test('modal: a plan that returns after the sets changed is not shown', function(
     assert(ok, err)
   end)
 end)
+
+test('modal: a bool flag renders as a switch; Space toggles it into the sets', function()
+  sized(140, function()
+    local buf = blog_buf('app/Posts/Index.alder')
+    local s = open(buf)
+    modal.type_query('new page')
+    wait_preview(s)
+    local function find()
+      for i, f in ipairs(s.fields) do
+        if f.name == 'example' then return i, f end
+      end
+    end
+    local function line(row) return vim.api.nvim_buf_get_lines(s.bufs.form, row - 1, row, false)[1] end
+    local row = find()
+    assert(row, 'new page has no `example` flag: build alder from the m6b-plan2 branch (go install ./cmd/alder)')
+    assert(line(row) == '[x] example', vim.inspect(vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false)))
+    assert(form.sets(s.preset, s.typed).example == nil, 'a default must not be sent')
+    modal.focus_field(row)
+    vim.api.nvim_feedkeys(' ', 'x', false)
+    assert(H.wait(1000, function() return s.typed.example == 'false' end), vim.inspect(s.typed))
+    assert(line(row) == '[ ] example')
+    assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end))
+    assert(form.sets(s.preset, s.typed).example == 'false')
+
+    -- the server drops the default once `list` is set (DefaultUnless), and sets never carry it
+    s.typed = {}
+    modal.set_field('list', 'Post')
+    assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end))
+    local r, f = find()
+    assert(r and line(r) == '[ ] example', vim.inspect(vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false)))
+    assert(f.value == '' and f.source ~= 'default', vim.inspect(f))
+    assert(form.sets(s.preset, s.typed).example == nil)
+  end)
+end)
