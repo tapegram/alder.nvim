@@ -102,7 +102,7 @@ test('generate: :Alder fill ... - is refused, fill --list is read-only', functio
   local messages, restore = H.capture_notify()
   vim.cmd('Alder fill Home.x -')
   restore()
-  assert(messages[1] and messages[1].msg:find(':AlderFill', 1, true), vim.inspect(messages))
+  assert(messages[1] and messages[1].msg:find('reads stdin: run it in a terminal', 1, true), vim.inspect(messages))
   vim.cmd('Alder fill --list')
   assert(H.wait(20000, function() return preview_buf() ~= nil end), 'no output')
   local buf = preview_buf()

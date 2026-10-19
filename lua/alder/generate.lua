@@ -88,7 +88,7 @@ end
 -- refusal_list puts a refusal's diagnostics in a new quickfix list titled `alder <cmd>`. They
 -- describe the dry-run copy, not the buffers, so they are never published as diagnostics and
 -- the user's lists (and `alder check`'s) stay in the stack.
-local function refusal_list(app_root, fargs, diagnostics)
+function M.refusal_list(app_root, fargs, diagnostics)
   local items = {}
   for _, d in ipairs(diagnostics or {}) do
     table.insert(items, { filename = app_root .. '/' .. d.file, lnum = d.line, col = d.col,
@@ -129,7 +129,7 @@ function M.run(fargs, o)
     end
     if json.error then
       vim.notify(json.error, vim.log.levels.ERROR)
-      refusal_list(app_root, fargs, json.diagnostics)
+      M.refusal_list(app_root, fargs, json.diagnostics)
     elseif fargs[1] == 'fill' and vim.tbl_contains(fargs, '--list') then
       show_preview(app_root, fargs, json, { readonly = true })
     elseif asked_dry then
@@ -140,73 +140,6 @@ function M.run(fargs, o)
       M.after_write(app_root, json)
     end
     if o.on_done then o.on_done(res) end
-  end)
-end
-
--- ask runs the prompts in order, each a function(done) that calls done(value|nil); nil stops.
-local function ask(steps, finish)
-  local values = {}
-  local function step(i)
-    if i > #steps then return finish(values) end
-    steps[i](function(v)
-      if v == nil then return end
-      table.insert(values, v)
-      step(i + 1)
-    end)
-  end
-  step(1)
-end
-
--- new_interactive is :AlderNew: pick a generator, type its arguments, add flags, preview.
-function M.new_interactive()
-  local new = require('alder.commands').find({ 'new' })
-  if not new then
-    vim.notify('alder: `alder help --json` failed; is alder on PATH and recent enough?', vim.log.levels.ERROR)
-    return
-  end
-  vim.ui.select(new.subcommands or {}, {
-    prompt = 'alder new',
-    format_item = function(c) return c.name .. ' — ' .. c.summary end,
-  }, function(kind)
-    if not kind then return end
-    local steps = {}
-    for _, a in ipairs(kind.args or {}) do
-      table.insert(steps, function(done)
-        vim.ui.input({ prompt = a .. ': ' }, function(v)
-          if v == nil then return done(nil) end
-          if v == '' and a:match('^%[') then return done({}) end
-          if v == '' then return done(nil) end
-          -- a variadic argument (`<field>:<Type>…`) is several words; any other is one
-          done(a:match('…$') and vim.split(vim.trim(v), '%s+') or { v })
-        end)
-      end)
-    end
-    ask(steps, function(values)
-      local fargs = { 'new', kind.name }
-      for _, v in ipairs(values) do vim.list_extend(fargs, v) end
-      local function more()
-        local choices = { { name = 'done' } }
-        for _, f in ipairs(kind.flags or {}) do
-          if f.name ~= '--dir' and f.name ~= '--json' and f.name ~= '--dry-run' then table.insert(choices, f) end
-        end
-        vim.ui.select(choices, {
-          prompt = 'alder new ' .. kind.name .. ': add a flag',
-          format_item = function(f) return f.summary and (f.name .. (f.value and (' ' .. f.value) or '') .. ' — ' .. f.summary) or f.name end,
-        }, function(f)
-          if not f then return end
-          if f.name == 'done' then return M.run(fargs) end
-          if not f.value then
-            table.insert(fargs, f.name)
-            return more()
-          end
-          vim.ui.input({ prompt = f.name .. ' ' .. f.value .. ': ' }, function(v)
-            if v and v ~= '' then vim.list_extend(fargs, { f.name, v }) end
-            more()
-          end)
-        end)
-      end
-      more()
-    end)
   end)
 end
 

@@ -119,7 +119,7 @@ function M.alder(fargs)
   end
   if name == 'fill' and vim.tbl_contains(fargs, '-') then
     -- the CLI reads the expression from stdin, which a command line cannot give (and it refuses empty input)
-    vim.notify('alder: `:Alder fill … -` has no expression to read; use :AlderFill', vim.log.levels.ERROR)
+    vim.notify('`alder fill … -` reads stdin: run it in a terminal', vim.log.levels.ERROR)
     return
   end
   -- `new <name>` (not a generator kind) scaffolds an app, from the current directory

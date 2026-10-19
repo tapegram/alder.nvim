@@ -18,12 +18,22 @@ function M.check()
     -- an old alder exits 0 and prints text for `help --json`: only a command tree counts
     local help = vim.system({ cmd, 'help', '--json' }, { text = true }):wait()
     if help.code == 0 and require('alder.commands').decode_tree(help.stdout) then
-      h.ok('`alder help --json` works (completion and :AlderNew)')
+      h.ok('`alder help --json` works (completion and :AlderGenerate)')
     else
       h.error('`alder help --json` failed: this alder predates editor support; build a newer one')
     end
   else
     h.error(('`%s` is not on PATH'):format(cmd))
+  end
+
+  if not require('alder.config').options.lsp then
+    h.warn('opts.lsp is false: CLI mode')
+  else
+    local status = require('alder.lsp').status()
+    for _, s in ipairs(status) do
+      if s.running then h.ok(('alder lsp running for `%s`'):format(s.root)) end
+    end
+    if #status == 0 then h.info('no alder lsp running (open an .alder file inside an app)') end
   end
 
   if vim.fn.executable('tree-sitter') == 1 then
