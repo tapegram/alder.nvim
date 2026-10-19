@@ -76,8 +76,10 @@ end
 
 -- invalidate drops every preview in flight or waiting: its answer no longer counts and the form
 -- is not ready until a newer one arrives.
+local seq_counter = 0 -- shared by every modal, so a closed modal's answer never matches a new one's
 local function invalidate(s)
-  s.seq = s.seq + 1
+  seq_counter = seq_counter + 1
+  s.seq = seq_counter
   s.ready = false
   s.timer:stop()
 end
@@ -376,7 +378,6 @@ function M.commit_option()
   local s = M.state
   local f = s and s.focus and s.fields[s.focus]
   if not f or not s.moved or not f.choices or #f.choices == 0 then return end
-  s.moved = false
   local opts = form.options(f, s.typed[f.name])
   local pick = opts[math.max(1, math.min(s.pick or 1, #opts))]
   local cur = s.typed[f.name]
@@ -496,10 +497,12 @@ function M.send_preview()
   local n = s.seq
   updating(true)
   request(s.buf, 'alder/preview', params(s, { id = sel.id, sets = sets_payload(s) }), function(result)
-    vim.schedule(function() M.on_preview(n, ui.plain(result) or {}) end)
+    vim.schedule(function()
+      if M.state == s then M.on_preview(n, ui.plain(result) or {}) end
+    end)
   end, function(err)
     vim.schedule(function()
-      if failed(s) then return end
+      if M.state ~= s or failed(s) then return end
       M.on_preview(n, { error = 'the preview failed: ' .. tostring(err and err.message or err), files = {} })
     end)
   end)
@@ -534,8 +537,8 @@ end
 -- ── Enter and review ─────────────────────────────────────────────────────────
 
 -- apply closes the modal and applies id with the current sets through apply.lua.
-local function apply(s, id)
-  local buf, sets, pos = s.buf, sets_payload(s), s.origin.cursor
+local function apply(s, id, planned)
+  local buf, sets, pos = s.buf, planned or sets_payload(s), s.origin.cursor
   M.close()
   require('alder.apply').run(buf, id, sets, nil, pos)
 end
@@ -562,14 +565,18 @@ function M.review()
   local sel = M.selected()
   if not s or not sel then return end
   M.commit_option()
-  request(s.buf, 'alder/plan', params(s, { id = sel.id, sets = sets_payload(s) }), function(plan)
+  local planned = sets_payload(s)
+  request(s.buf, 'alder/plan', params(s, { id = sel.id, sets = planned }), function(plan)
     local st = M.state
     if st ~= s then return end
+    -- the form changed while the plan was in flight: it is not the plan of what is on screen
+    local now = M.selected()
+    if not now or now.id ~= sel.id or not vim.deep_equal(planned, sets_payload(st)) then return end
     st.suspended = true
     vim.cmd.stopinsert()
     local shown = require('alder.review').open(ui.plain(plan) or {}, {
       id = sel.id,
-      on_apply = function() apply(st, sel.id) end,
+      on_apply = function() apply(st, sel.id, planned) end,
       on_back = function()
         if M.state ~= st then return end
         st.suspended = false

@@ -346,3 +346,42 @@ test('modal: an error with no server attached closes the modal and leaves no flo
     assert(H.float_text() == '', 'floats left:\n' .. H.float_text())
   end)
 end)
+
+test('modal: a closed modal\'s preview answer cannot paint into a reopened one', function()
+  sized(140, function()
+    local buf = blog_buf('app/Posts/Index.alder')
+    vim.fn.search('load params')
+    local a = open(buf)
+    local n = a.seq
+    modal.close()
+    local b = open(buf)
+    modal.type_query('new msg')
+    wait_preview(b)
+    modal.set_field('name', 'Delete')
+    assert(not b.ready)
+    modal.on_preview(n, { ready = true, fields = {}, files = {} })
+    assert(not b.ready and #b.fields > 0, 'an old modal\'s answer painted')
+  end)
+end)
+
+test('modal: a plan that returns after the sets changed is not shown', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    modal.set_field('name', 'Delete')
+    assert(H.wait(10000, function() return s.ready end))
+    local lsp = require('alder.lsp')
+    local orig, plan_cb = lsp.request, nil
+    lsp.request = function(b, method, p, cb, on_err)
+      if method == 'alder/plan' then plan_cb = cb else return orig(b, method, p, cb, on_err) end
+    end
+    local ok, err = pcall(function()
+      modal.review()
+      assert(plan_cb, 'no plan request')
+      modal.set_field('name', 'Other')
+      plan_cb({ files = {}, notes = {}, canApply = true })
+      assert(not s.suspended and not H.float_text():find(' files ', 1, true), 'a stale plan was shown')
+    end)
+    lsp.request = orig
+    assert(ok, err)
+  end)
+end)
