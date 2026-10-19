@@ -1,5 +1,6 @@
 local H = require('helpers')
 local modal = require('alder.modal')
+local form = require('alder.form')
 
 local function blog_buf(rel)
   local dst = H.tmpdir() .. '/blog'
@@ -81,6 +82,8 @@ test('modal: typing filters, arrows move, an empty list is harmless', function()
     modal.move(1)
     modal.enter()
     assert(modal.state ~= nil, 'enter on an empty list closed the modal')
+    assert(#s.fields == 0 and not s.ready and not s.updating, 'the form was not cleared on an empty list')
+    assert(vim.deep_equal(vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false), { '' }))
     assert(H.float_text():find(' 0 of ', 1, true), H.float_text())
     -- typing in the search buffer itself drives the same path
     vim.api.nvim_buf_set_lines(s.bufs.search, 0, -1, false, { 'page' })
@@ -142,4 +145,204 @@ test('modal: without nui, one notification and nothing opens', function()
   package.loaded['nui.popup'] = saved
   assert(messages[1] and messages[1].msg == require('alder.ui').MISSING, vim.inspect(messages))
   assert(modal.state == nil)
+end)
+
+local function form_options(f, s) return form.options(f, s.typed[f.name]) end
+
+local function text_of(buf) return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n') end
+
+local function wait_preview(s)
+  assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end), 'no preview answer')
+end
+
+-- opened_msg opens the modal on `new msg` at Posts/Index's `load params` and waits for the first preview.
+local function opened_msg(id)
+  local buf = blog_buf('app/Posts/Index.alder')
+  vim.fn.search('load params')
+  local s = open(buf)
+  modal.type_query(id or 'new msg')
+  wait_preview(s)
+  return buf, s
+end
+
+test('modal: selecting a generator shows its form; typing a field updates the preview', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    local names = vim.tbl_map(function(f) return f.name end, s.fields)
+    assert(names[1] == 'page' and names[2] == 'name' and #names == 6, vim.inspect(names))
+    local lines = vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false)
+    assert(lines[1] == 'Posts.Index' and lines[2] == '', vim.inspect(lines))
+    assert(not s.ready)
+    assert(H.float_text():find(' new msg  ', 1, true), 'form title lacks the id:\n' .. H.float_text())
+    modal.set_field('name', 'Delete')
+    assert(not s.ready, 'ready must drop while the preview is in flight')
+    assert(H.wait(10000, function() return s.ready end), 'never ready: ' .. vim.inspect(s.preview))
+    local pv = text_of(s.bufs.preview)
+    assert(pv:find('~ app/Posts/Index.alder  +', 1, true) and pv:find('@@', 1, true) and pv:find('Delete', 1, true), pv)
+    assert(H.float_text():find(' app/Posts/Index.alder ', 1, true), 'preview title is the main file')
+  end)
+end)
+
+test('modal: Tab moves search -> fields -> search; the cursor row focuses a field', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    modal.focus_next()
+    assert(vim.api.nvim_get_current_win() == s.win.form and s.focus == 1, vim.inspect(s.focus))
+    modal.focus_next()
+    assert(s.focus == 2)
+    for _ = 3, #s.fields do modal.focus_next() end
+    assert(s.focus == #s.fields)
+    modal.focus_next()
+    assert(s.focus == nil and vim.api.nvim_get_current_win() == s.win.search, 'did not wrap to search')
+    modal.focus_prev()
+    assert(s.focus == #s.fields)
+    modal.focus_search()
+    vim.api.nvim_feedkeys(vim.keycode('<S-Tab>'), 'x', false)
+    assert(s.focus == #s.fields, 'S-Tab on the search line did not reach the last field')
+    -- the cursor on another row focuses that field
+    vim.api.nvim_win_set_cursor(s.win.form, { 2, 0 })
+    modal.on_cursor_moved()
+    assert(s.focus == 2)
+    assert(s.typed.page == nil, 'moving past a field wrote it')
+  end)
+end)
+
+test('modal: typing in the form buffer is a field edit; a joined line is put back', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    modal.focus_field(2)
+    vim.api.nvim_feedkeys('AToggle', 'x', false)
+    modal.on_form_changed()
+    assert(s.typed.name == 'Toggle', vim.inspect(s.typed))
+    assert(H.wait(10000, function() return s.ready end))
+    vim.api.nvim_buf_set_lines(s.bufs.form, 0, -1, false, { 'Posts.IndexToggle' }) -- a join
+    modal.on_form_changed()
+    assert(#vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false) == #s.fields, 'rows not restored')
+    assert(vim.api.nvim_buf_get_lines(s.bufs.form, 1, 2, false)[1] == 'Toggle', 'value lost in the re-render')
+  end)
+end)
+
+test('modal: a choice field lists options; Down picks, Tab commits; passing over it commits nothing', function()
+  sized(140, function()
+    local _, s = opened_msg('remove page')
+    modal.focus_field(1)
+    local f = s.fields[1]
+    assert(f.choices and #f.choices >= 2, vim.inspect(f))
+    local has_options = false
+    for _, m in ipairs(vim.api.nvim_buf_get_extmarks(s.bufs.form, -1, 0, -1, { details = true })) do
+      if m[4].virt_lines then has_options = true end
+    end
+    assert(has_options, 'no options under the choice field')
+    -- an unmoved pick commits nothing, even when it is not the first option
+    modal.commit_option()
+    assert(s.typed[f.name] == nil, vim.inspect(s.typed))
+    local start = s.pick
+    assert(modal.option(1))
+    assert(s.pick == start % #form_options(f, s) + 1, 'pick ' .. s.pick)
+    modal.commit_option()
+    assert(s.typed[f.name] == form_options(f, s)[s.pick], vim.inspect(s.typed))
+  end)
+end)
+
+test('modal: Enter when not ready jumps to the first invalid field; when ready it applies', function()
+  sized(140, function()
+    local buf, s = opened_msg()
+    local before = text_of(buf)
+    modal.enter()
+    assert(modal.state == s and s.focus == 2 and vim.api.nvim_get_current_win() == s.win.form, 'enter did not jump to `name`')
+    modal.set_field('name', 'Delete')
+    -- a preview is in flight: enter must not apply the sets it has not previewed
+    modal.enter()
+    assert(modal.state == s and text_of(buf) == before, 'enter applied during an update')
+    assert(H.wait(10000, function() return s.ready end))
+    local messages, restore = H.capture_notify()
+    modal.enter()
+    assert(H.wait(10000, function() return text_of(buf):find('Delete', 1, true) ~= nil end), 'not applied: ' .. vim.inspect(messages))
+    restore()
+    assert(modal.state == nil and H.float_text() == '', 'modal still open after apply')
+    assert(vim.api.nvim_get_current_buf() == buf)
+    vim.cmd('silent undo')
+    assert(text_of(buf) == before, 'one u does not restore')
+  end)
+end)
+
+test('modal: an answer for sets changed since cannot mark the form ready', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    modal.set_field('name', 'Delete')
+    local stale = s.seq
+    modal.set_field('name', 'Other')
+    assert(not s.ready and s.seq > stale)
+    modal.on_preview(stale, { ready = true, fields = s.fields, files = {} })
+    assert(not s.ready, 'a stale answer marked the form ready')
+    modal.select(2) -- a selection change drops the in-flight answer too
+    assert(not s.ready and s.seq > stale)
+  end)
+end)
+
+test('modal: a preset selects the generator and focuses the first missing field', function()
+  sized(140, function()
+    local buf = blog_buf('app/Posts/Index.alder')
+    vim.fn.search('load params')
+    local s = open(buf, { generator = 'new msg', sets = { page = 'Posts.Index' } })
+    assert(modal.selected().id == 'new msg')
+    assert(H.wait(10000, function() return s.focus == 2 end), 'focus ' .. tostring(s.focus))
+    assert(vim.api.nvim_get_current_win() == s.win.form)
+  end)
+end)
+
+test('modal: C-o opens the review over the modal; q returns to it; Enter applies', function()
+  sized(140, function()
+    local buf, s = opened_msg()
+    modal.set_field('name', 'Delete')
+    assert(H.wait(10000, function() return s.ready end))
+    modal.review()
+    assert(H.wait(10000, function() return H.float_text():find(' files ', 1, true) ~= nil end), H.float_text())
+    assert(H.float_text():find('@@', 1, true) and s.suspended)
+    vim.api.nvim_feedkeys('q', 'x', false)
+    assert(H.wait(1000, function() return not s.suspended end))
+    assert(modal.state == s and H.float_text():find(' Generate ', 1, true) and not H.float_text():find(' files ', 1, true))
+    modal.review()
+    assert(H.wait(10000, function() return H.float_text():find(' files ', 1, true) ~= nil end))
+    vim.api.nvim_feedkeys(vim.keycode('<CR>'), 'x', false)
+    assert(H.wait(10000, function() return text_of(buf):find('Delete', 1, true) ~= nil end), 'review Enter did not apply')
+    assert(modal.state == nil and H.float_text() == '')
+  end)
+end)
+
+test('modal: a failed preview request clears updating and shows the error in the pane', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    local lsp = require('alder.lsp')
+    local orig = lsp.request
+    lsp.request = function(_, method, _, _, on_err)
+      if method == 'alder/preview' and on_err then on_err({ code = -32603, message = 'boom' }) end
+    end
+    local messages, restore = H.capture_notify()
+    local ok, err = pcall(function()
+      modal.set_field('name', 'Delete')
+      assert(H.wait(2000, function() return not s.updating end), 'updating stuck')
+    end)
+    restore()
+    lsp.request = orig
+    assert(ok, err)
+    assert(modal.state == s and not s.ready and text_of(s.bufs.preview):find('boom', 1, true), text_of(s.bufs.preview))
+  end)
+end)
+
+test('modal: an error with no server attached closes the modal and leaves no float', function()
+  sized(140, function()
+    local _, s = opened_msg()
+    local lsp = require('alder.lsp')
+    local orig, orig_client = lsp.request, lsp.client
+    lsp.client = function() return nil end
+    lsp.request = function(_, _, _, _, on_err) if on_err then on_err({ message = 'not attached' }) end end
+    local ok, err = pcall(function()
+      modal.set_field('name', 'Delete')
+      assert(H.wait(2000, function() return modal.state == nil end), 'modal kept')
+    end)
+    lsp.request, lsp.client = orig, orig_client
+    assert(ok, err)
+    assert(H.float_text() == '', 'floats left:\n' .. H.float_text())
+  end)
 end)
