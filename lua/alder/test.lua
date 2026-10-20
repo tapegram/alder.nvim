@@ -82,17 +82,21 @@ function M.warn_positions(_, results)
   end
 end
 
-local runs = {} -- real app root → the latest launch { handle }
+local runs = {} -- real app root + label → the latest launch { handle }
 
--- launch is the shared start of a CLI run for an app (tests, mutants): a newer launch for the
--- same app cancels the older one, whose result is then dropped; modified app buffers are
+-- launch is the shared start of a CLI run for an app (tests, mutants): a newer launch with the
+-- same label for the same app cancels the older one (WARN), whose result is then dropped. Test
+-- and mutate runs are independent (they build in separate directories, so they may overlap); modified app buffers are
 -- written first (WARN for those that could not be); `alder <args> <app_root>` runs from the
 -- app root and on_done(res) gets the result. label prefixes the notifications. Returns the
 -- system handle (nil when the binary is missing).
 function M.launch(app_root, label, args, on_done)
-  local key = real(app_root)
+  local key = real(app_root) .. '\0' .. label
   local prev = runs[key]
-  if prev and prev.handle then pcall(function() prev.handle:kill('sigterm') end) end
+  if prev and prev.handle then
+    pcall(function() prev.handle:kill('sigterm') end)
+    vim.notify(label .. ': the earlier run was cancelled', vim.log.levels.WARN)
+  end
   local unwritten = M.write_app_buffers(app_root)
   if #unwritten > 0 then
     vim.notify(label .. ': not written, the run reads disk: ' .. table.concat(unwritten, ', '), vim.log.levels.WARN)
@@ -214,6 +218,7 @@ function M.mutate(app_root, o)
   local args = { 'test', '--mutate', '--json' }
   vim.list_extend(args, o.args or {})
   local function done(res) if o.on_done then o.on_done(res) end end
+  vim.notify(M.MUTATE_TITLE .. ': running…', vim.log.levels.INFO)
   local started = M.launch(app_root, M.MUTATE_TITLE, args, function(res, full)
     if M.compile_failed(app_root, M.MUTATE_TITLE, res) then return done(res) end
     local score
