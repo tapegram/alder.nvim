@@ -69,6 +69,11 @@ require('alder').setup({
     diagnostics = '<leader>ac',
     explain = '<leader>ae',
     run = '<leader>ar',
+    test = '<leader>at',
+    test_at = '<leader>aT',
+    mutate = '<leader>am',
+    repl = '<leader>ax',
+    send = '<leader>as',
   },
   revision = nil,       -- install the grammar from this tag of tapegram/alder, e.g. 'v0.2.0'
   path = nil,           -- install the grammar from a local alder checkout (see below)
@@ -91,6 +96,9 @@ run so the grammar matches your compiler.
 | `:AlderExplain [code]` | `alder explain` for the code (default: the diagnostic under the cursor) |
 | `:AlderGenerate [id]` | open the generator modal (preset to `id`): search the generators, fill the form, watch the preview, `<CR>` applies, `<C-o>` reviews |
 | `:AlderDiagnostics` | the buffers' diagnostics in the quickfix list (`<leader>ac`) |
+| `:AlderTest [args]` | `alder test`: failures land in the quickfix list at their `test` line, compile errors as diagnostics |
+| `:AlderMutate [args]` | `alder test --mutate` in the background: the survivors land in the quickfix list at the mutated expression, `before → after` |
+| `:AlderRepl` | `alder repl --in <this module>` in a split |
 | `:Alder <args…>` | any `alder` command, with completion; it writes to disk through the CLI |
 
 ## Keys
@@ -103,6 +111,13 @@ In `.alder` buffers:
 | `<leader>ac` | diagnostics to the quickfix list |
 | `<leader>ae` | explain the diagnostic under the cursor |
 | `<leader>ar` | `alder run` |
+| `<leader>at` | `alder test`; failures land in the quickfix list at their `test` line, compile errors as diagnostics |
+| `<leader>aT` | run the test under the cursor (the module's tests when none is above it) |
+| `<leader>am` | `alder test --mutate` in the background; the survivors land in the quickfix list at the mutated expression, `before → after` |
+| `<leader>ax` | open `alder repl --in <this module>` in a split |
+| `<leader>as` | send the current line (normal mode) or the selection (visual mode) to the REPL |
+
+`repl --in` needs an `alder` built from this change or later; `:checkhealth alder` says whether yours has it.
 
 Each can be set to `false` in `opts.keys`. With which-key, `<leader>a` is the group "alder".
 
