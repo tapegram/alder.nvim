@@ -30,6 +30,8 @@ function M.to_diagnostic(d)
   }
 end
 
+M.published_by = {} -- real app root → the source of its latest publish
+
 -- set_qf replaces the quickfix list when the current one is ours (by title), and otherwise
 -- pushes a new one, so a list the user made is never overwritten. With no items and no
 -- current list of ours there is nothing to say, and the user's list stays current.
@@ -46,8 +48,10 @@ end
 -- Each buffer's b:changedtick is recorded in b:alder_check_tick when its diagnostics are set;
 -- a fix is only applied while the tick is unchanged (fix_at_cursor). `alder check` reads the
 -- saved file, so a buffer with unsaved changes gets no tick: its positions are already stale.
-function M.publish(app_root, objects)
+-- source names who published (default 'alder check'); M.published_by keeps the latest per app.
+function M.publish(app_root, objects, source)
   local app_real = real(app_root)
+  M.published_by[app_real] = source or 'alder check'
   local by_file = {}
   for _, d in ipairs(objects) do
     if d.code and d.file then

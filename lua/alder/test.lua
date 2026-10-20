@@ -118,12 +118,20 @@ end
 -- publishes them as check does and opens the list on an error. Returns true when it did.
 function M.compile_failed(app_root, label, res)
   if not (res.json and res.json.diagnostics) then return false end
-  local items = check.publish(app_root, res.json.diagnostics)
+  local items = check.publish(app_root, res.json.diagnostics, label)
   vim.notify(label .. ': the app does not check', vim.log.levels.ERROR)
   for _, item in ipairs(items) do
     if item.type == 'E' then vim.cmd('copen') break end
   end
   return true
+end
+
+-- clear_compiled clears the compile diagnostics a failed test or mutate run published, once a
+-- later run of either builds: they are stale. Diagnostics an `alder check` published since are
+-- left alone (they are current, warnings included, which a passing run does not report).
+function M.clear_compiled(app_root)
+  local by = check.published_by[real(app_root)]
+  if by == 'alder test' or by == M.MUTATE_TITLE then check.publish(app_root, {}, by) end
 end
 
 -- run runs `alder test --json <o.args>` for the app and reports: compile diagnostics through
@@ -140,6 +148,7 @@ function M.run(app_root, o)
       cli.report(full, res)
       return done(res)
     end
+    M.clear_compiled(app_root)
     M.warn_positions(app_root, results)
     local items = {}
     for _, r in ipairs(results) do
@@ -212,13 +221,13 @@ end
 
 -- mutate runs `alder test --mutate --json` in the background and puts the survivors in the
 -- quickfix list. The output is one {"mutants":[...]} object, then the score object. A newer
--- run for the same app (test or mutate) cancels this one (see launch).
+-- mutate run for the same app cancels this one; a test run does not (see launch). The
+-- "running…" notice comes once the run has started.
 function M.mutate(app_root, o)
   o = o or {}
   local args = { 'test', '--mutate', '--json' }
   vim.list_extend(args, o.args or {})
   local function done(res) if o.on_done then o.on_done(res) end end
-  vim.notify(M.MUTATE_TITLE .. ': running…', vim.log.levels.INFO)
   local started = M.launch(app_root, M.MUTATE_TITLE, args, function(res, full)
     if M.compile_failed(app_root, M.MUTATE_TITLE, res) then return done(res) end
     local score
@@ -229,6 +238,7 @@ function M.mutate(app_root, o)
       cli.report(full, res)
       return done(res)
     end
+    M.clear_compiled(app_root)
     local items = {}
     for _, obj in ipairs(res.objects) do
       for _, m in ipairs(obj.mutants or {}) do
@@ -254,6 +264,7 @@ function M.mutate(app_root, o)
     end
     done(res)
   end)
+  if started then vim.notify(M.MUTATE_TITLE .. ': running…', vim.log.levels.INFO) end
   return started
 end
 

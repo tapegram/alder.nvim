@@ -37,17 +37,46 @@ local function win_of(buf)
   end
 end
 
-local function flush(s)
-  for _, text in ipairs(s.queue) do vim.fn.chansend(s.job, text) end
-  s.queue = {}
+local function entries(n) return ('%d entr%s'):format(n, n == 1 and 'y' or 'ies') end
+
+-- put writes text to the REPL's job and reports whether it could: a job that has gone makes
+-- chansend raise E900, which is caught here and said as a notice by the caller.
+local function put(s, text)
+  local ok, n = pcall(vim.fn.chansend, s.job, text)
+  return ok and n > 0
 end
 
-local BANNER = 'alder repl:'
+local function flush(s)
+  local queue = s.queue
+  s.queue = {}
+  for i, text in ipairs(queue) do
+    if not put(s, text) then
+      vim.notify('alder repl: the REPL has exited; ' .. entries(#queue - i + 1) .. ' not sent', vim.log.levels.WARN)
+      return
+    end
+  end
+end
+
+-- banner is the end of the line the REPL prints once it reads input:
+-- `alder repl: <app>, in <M> (:help for the commands, :quit to leave)`, without `, in <M>` in
+-- app scope. Its startup errors (`alder repl: no module …`, `alder repl: the app has errors; …`)
+-- share the prefix, not this.
+function M.banner(module)
+  return (module and (', in ' .. module) or '') .. ' (:help for the commands'
+end
+
+-- show puts the session's buffer in a bottom split without taking the focus.
+local function show(s)
+  local cur = vim.api.nvim_get_current_win()
+  vim.cmd('botright sbuffer ' .. s.buf)
+  vim.cmd('stopinsert')
+  vim.api.nvim_set_current_win(cur)
+end
 
 -- open starts the app's REPL in a bottom split (speaking as module, when given) or focuses
 -- the running one; the module of a running REPL is not changed (`:in` inside it does that).
--- Text sent before the REPL prints its banner is queued and flushed once the banner arrives:
--- a chansend that early would be lost.
+-- Text sent before the REPL prints its banner is queued and flushed as the banner arrives
+-- (a chansend that early would be lost); a REPL that exits before it says the text was not sent.
 function M.open(app_root, module)
   local key = root.real(app_root)
   local s = M.sessions[key]
@@ -56,52 +85,73 @@ function M.open(app_root, module)
     if w then vim.api.nvim_set_current_win(w) else vim.cmd('botright sbuffer ' .. s.buf) end
     return s
   end
+  if not require('alder.cli').available() then return nil end
+  local banner = M.banner(module)
   vim.cmd('botright new')
+  local win = vim.api.nvim_get_current_win()
   s = { ready = false, queue = {}, seen = '' }
   s.buf = vim.api.nvim_get_current_buf()
-  s.job = vim.fn.jobstart(M.argv(app_root, module), {
+  local ok, job = pcall(vim.fn.jobstart, M.argv(app_root, module), {
     term = true,
     cwd = app_root,
     on_stdout = function(_, data)
       if s.ready then return end
       -- the banner may arrive split across chunks: look at everything seen so far
       s.seen = s.seen .. table.concat(data or {}, '\n')
-      if s.seen:find(BANNER, 1, true) then
+      if s.seen:find(banner, 1, true) then
         s.ready, s.seen = true, nil
-        vim.schedule(function() flush(s) end)
+        flush(s) -- here, not scheduled: a send after ready must not overtake the queue
       end
     end,
-    on_exit = function() if M.sessions[key] == s then M.sessions[key] = nil end end,
+    on_exit = function()
+      if M.sessions[key] == s then M.sessions[key] = nil end
+      if not s.ready and #s.queue > 0 then
+        local n = #s.queue
+        s.queue = {}
+        vim.notify('alder repl: the REPL exited before it was ready; ' .. entries(n) .. ' not sent', vim.log.levels.WARN)
+      end
+    end,
   })
-  if s.job <= 0 then
+  if not ok or job <= 0 then
+    if vim.api.nvim_win_is_valid(win) and #vim.api.nvim_list_wins() > 1 then vim.api.nvim_win_close(win, true) end
+    if vim.api.nvim_buf_is_valid(s.buf) then pcall(vim.api.nvim_buf_delete, s.buf, { force = true }) end
     vim.notify('alder repl: could not start `' .. table.concat(M.argv(app_root, module), ' ') .. '`', vim.log.levels.ERROR)
     return nil
   end
+  s.job = job
   M.sessions[key] = s
   vim.cmd('startinsert')
   return s
 end
 
 -- send gives text to the app's REPL. With none running it starts one (speaking as module,
--- when given) without taking the focus; text sent before the banner waits for it.
+-- when given) without taking the focus; text sent before the banner waits for it. A running
+-- REPL whose window was closed is shown again (without the focus), so the result is seen.
 function M.send(app_root, text, module)
   local s = M.sessions[root.real(app_root)]
-  if not alive(s) then
+  if alive(s) then
+    if not win_of(s.buf) then show(s) end
+  else
     local cur = vim.api.nvim_get_current_win()
     s = M.open(app_root, module)
     vim.cmd('stopinsert')
     vim.api.nvim_set_current_win(cur)
     if not s then return end
   end
-  if s.ready then vim.fn.chansend(s.job, text) else table.insert(s.queue, text) end
+  if not s.ready or #s.queue > 0 then return table.insert(s.queue, text) end
+  if not put(s, text) then
+    vim.notify('alder repl: the REPL has exited; not sent: ' .. vim.trim(text), vim.log.levels.WARN)
+  end
 end
 
 -- module_for_buf is the module a REPL for buf speaks as: the buffer's `module` name (dotted
 -- for a nested one) in an .alder buffer, else nil (app scope). An alder without `repl --in`
--- gets nil too, with a warning.
+-- gets nil too, with a warning; a missing alder gets the module (open says it is missing).
 function M.module_for_buf(buf)
   local module = vim.bo[buf].filetype == 'alder' and require('alder.buf').module_name(buf) or nil
-  if module and not require('alder.commands').has_flag({ 'repl' }, '--in') then
+  -- with no binary at all, say nothing here: open reports the missing binary
+  local present = vim.fn.executable(require('alder.config').options.cmd) == 1
+  if module and present and not require('alder.commands').has_flag({ 'repl' }, '--in') then
     vim.notify('alder repl: this alder has no --in; update it (opening in app scope)', vim.log.levels.WARN)
     return nil
   end
