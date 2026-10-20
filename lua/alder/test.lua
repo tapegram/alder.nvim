@@ -187,4 +187,75 @@ function M.at_cursor()
   M.for_current({ args = { '-run', M.run_pattern(module, name) } })
 end
 
+M.MUTATE_TITLE = 'alder test --mutate'
+
+-- survivor maps one `--mutate --json` mutant to a quickfix item, or nil when it was killed.
+function M.survivor(app_root, m)
+  if m.killed or not m.file then return nil end
+  return {
+    filename = app_root .. '/' .. m.file,
+    lnum = m.line or 0,
+    col = m.col or 0,
+    type = 'W',
+    text = ('survived  %s: %s → %s'):format(m.kind or '?', m.before or '', m.after or ''),
+  }
+end
+
+-- mutate_title is the quickfix title, from the run's score object.
+function M.mutate_title(s)
+  return ('%s — %d killed, %d survived (%.2f)'):format(M.MUTATE_TITLE, s.killed or 0, s.survived or 0, s.score or 0)
+end
+
+-- mutate runs `alder test --mutate --json` in the background and puts the survivors in the
+-- quickfix list. The output is one {"mutants":[...]} object, then the score object. A newer
+-- run for the same app (test or mutate) cancels this one (see launch).
+function M.mutate(app_root, o)
+  o = o or {}
+  local args = { 'test', '--mutate', '--json' }
+  vim.list_extend(args, o.args or {})
+  local function done(res) if o.on_done then o.on_done(res) end end
+  local started = M.launch(app_root, M.MUTATE_TITLE, args, function(res, full)
+    if M.compile_failed(app_root, M.MUTATE_TITLE, res) then return done(res) end
+    local score
+    for _, obj in ipairs(res.objects) do
+      if obj.score ~= nil and obj.killed ~= nil and obj.mutants == nil then score = obj end
+    end
+    if res.code == 2 or (res.json and res.json.error) or not score then
+      cli.report(full, res)
+      return done(res)
+    end
+    local items = {}
+    for _, obj in ipairs(res.objects) do
+      for _, m in ipairs(obj.mutants or {}) do
+        local e = M.survivor(app_root, m)
+        if e then table.insert(items, e) end
+      end
+    end
+    table.sort(items, function(a, b)
+      if a.filename ~= b.filename then return a.filename < b.filename end
+      return a.lnum < b.lnum
+    end)
+    local title = M.mutate_title(score)
+    -- the title changes with the score, so ours is a prefix match (check.set_qf is exact)
+    local ours = vim.startswith(vim.fn.getqflist({ title = 0 }).title, M.MUTATE_TITLE)
+    if #items > 0 or ours then
+      vim.fn.setqflist({}, ours and 'r' or ' ', { title = title, items = items })
+    end
+    if #items > 0 then
+      vim.cmd('copen')
+      vim.notify(title, vim.log.levels.WARN)
+    else
+      vim.notify(title .. ': no survivors', vim.log.levels.INFO)
+    end
+    done(res)
+  end)
+  return started
+end
+
+-- mutate_for_current runs the mutants of the current buffer's app.
+function M.mutate_for_current(o)
+  local r = root.require_for_buf(0)
+  if r then M.mutate(r, o) end
+end
+
 return M

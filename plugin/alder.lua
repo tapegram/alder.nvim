@@ -49,6 +49,10 @@ vim.api.nvim_create_user_command('AlderTest', function(o)
   require('alder.test').for_current({ args = o.fargs })
 end, { nargs = '*', desc = 'alder test [args]: failures in the quickfix list' })
 
+vim.api.nvim_create_user_command('AlderMutate', function(o)
+  require('alder.test').mutate_for_current({ args = o.fargs })
+end, { nargs = '*', desc = 'alder test --mutate [args] in the background: survivors in the quickfix list' })
+
 vim.api.nvim_create_user_command('AlderDiagnostics', function()
   require('alder.keys').actions.diagnostics()
 end, { desc = 'alder diagnostics of the open buffers in the quickfix list' })

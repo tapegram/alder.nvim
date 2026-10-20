@@ -7,6 +7,7 @@ M.actions = {
   run = function() require('alder.commands').alder({ 'run' }) end,
   test = function() require('alder.test').for_current() end,
   test_at = function() require('alder.test').at_cursor() end,
+  mutate = function() require('alder.test').mutate_for_current() end,
 }
 
 local DESC = {
@@ -16,6 +17,7 @@ local DESC = {
   run = 'alder: run',
   test = 'alder: run the tests',
   test_at = 'alder: run the test under the cursor',
+  mutate = 'alder: mutation testing (survivors to quickfix)',
 }
 
 local function mapped()
