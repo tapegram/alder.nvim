@@ -31,10 +31,10 @@ local function break_per_page()
   return buf, l
 end
 
-test('keys: ag ac ae ar are buffer-local; aa is gone (plan 2)', function()
+test('keys: ag ac ae ar at are buffer-local; aa is gone (plan 2)', function()
   vim.g.mapleader = ' '
   blog_buf('app/Post.alder')
-  for _, k in ipairs({ '<leader>ag', '<leader>ac', '<leader>ae', '<leader>ar' }) do
+  for _, k in ipairs({ '<leader>ag', '<leader>ac', '<leader>ae', '<leader>ar', '<leader>at' }) do
     assert(mapped(k), k .. ' not mapped')
   end
   assert(not mapped('<leader>aa'))
@@ -46,6 +46,11 @@ test('keys: false disables one key', function()
     blog_buf('app/Post.alder')
     assert(not mapped('<leader>ar'))
     assert(mapped('<leader>ag'))
+  end)
+  with_opts({ keys = { test = false } }, function()
+    blog_buf('app/Post.alder')
+    assert(not mapped('<leader>at'))
+    assert(mapped('<leader>ar'))
   end)
 end)
 

@@ -1,5 +1,8 @@
 local M = {}
 
+-- real resolves symlinks (an app root is compared by its real path), else just normalizes.
+function M.real(p) return vim.uv.fs_realpath(p) or vim.fs.normalize(p) end
+
 -- has_app reports whether dir has an entry named exactly `app` that is a directory. It reads
 -- the listing instead of stat-ing dir/app: on a case-insensitive file system that stat
 -- succeeds for a module directory named App.
@@ -33,6 +36,14 @@ function M.for_buf(buf)
   local name = vim.api.nvim_buf_get_name(buf or 0)
   if name == '' or name:match('^%a+://') then return M.find(vim.fn.getcwd()) end
   return M.find(name)
+end
+
+-- require_for_buf is for_buf for a command that needs an app: with none it says so and
+-- returns nil.
+function M.require_for_buf(buf)
+  local r = M.for_buf(buf)
+  if not r then vim.notify('alder: no `app/` directory above this file', vim.log.levels.ERROR) end
+  return r
 end
 
 return M

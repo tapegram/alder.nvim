@@ -6,7 +6,7 @@ M.ns = vim.api.nvim_create_namespace('alder')
 
 local QF_TITLE = 'alder check'
 
-local function real(p) return vim.uv.fs_realpath(p) or vim.fs.normalize(p) end
+local real = root.real
 
 -- severity maps a JSON `severity` to Neovim's: `warning` is WARN, anything else ERROR.
 function M.severity(s)
@@ -30,13 +30,14 @@ function M.to_diagnostic(d)
   }
 end
 
--- set_qf replaces the quickfix list when the current one is alder check's, and otherwise
+-- set_qf replaces the quickfix list when the current one is ours (by title), and otherwise
 -- pushes a new one, so a list the user made is never overwritten. With no items and no
--- current alder check list there is nothing to say, and the user's list stays current.
-local function set_qf(items)
-  local ours = vim.fn.getqflist({ title = 0 }).title == QF_TITLE
+-- current list of ours there is nothing to say, and the user's list stays current.
+function M.set_qf(items, title)
+  title = title or QF_TITLE
+  local ours = vim.fn.getqflist({ title = 0 }).title == title
   if not ours and #items == 0 then return end
-  vim.fn.setqflist({}, ours and 'r' or ' ', { title = QF_TITLE, items = items })
+  vim.fn.setqflist({}, ours and 'r' or ' ', { title = title, items = items })
 end
 
 -- publish replaces the alder diagnostics of every loaded .alder buffer of the app (so a fixed
@@ -82,7 +83,7 @@ function M.publish(app_root, objects)
     if a.filename ~= b.filename then return a.filename < b.filename end
     return a.lnum < b.lnum
   end)
-  set_qf(items)
+  M.set_qf(items)
   return items
 end
 
@@ -214,12 +215,8 @@ end
 
 -- for_current runs a check for the current buffer's app, or says there is none.
 function M.for_current(o)
-  local r = root.for_buf(0)
-  if not r then
-    vim.notify('alder: no `app/` directory above this file', vim.log.levels.ERROR)
-    return
-  end
-  M.run(r, o)
+  local r = root.require_for_buf(0)
+  if r then M.run(r, o) end
 end
 
 return M

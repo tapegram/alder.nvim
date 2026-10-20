@@ -5,6 +5,7 @@ M.actions = {
   diagnostics = function() vim.diagnostic.setqflist({ title = 'alder diagnostics', open = true }) end,
   explain = function() require('alder.check').explain() end,
   run = function() require('alder.commands').alder({ 'run' }) end,
+  test = function() require('alder.test').for_current() end,
 }
 
 local DESC = {
@@ -12,6 +13,7 @@ local DESC = {
   diagnostics = 'alder: diagnostics to quickfix',
   explain = 'alder: explain the diagnostic',
   run = 'alder: run',
+  test = 'alder: run the tests',
 }
 
 local function mapped()

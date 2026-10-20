@@ -104,11 +104,8 @@ end
 -- app root with --json --dir, and with preview on shows the --dry-run diff first.
 function M.run(fargs, o)
   o = o or {}
-  local app_root = o.app_root or root.for_buf(0)
-  if not app_root then
-    vim.notify('alder: no `app/` directory above this file', vim.log.levels.ERROR)
-    return
-  end
+  local app_root = o.app_root or root.require_for_buf(0)
+  if not app_root then return end
   if #M.modified(app_root) > 0 then
     vim.notify('alder: save all buffers first (:wall)', vim.log.levels.ERROR)
     return
