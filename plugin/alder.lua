@@ -53,6 +53,10 @@ vim.api.nvim_create_user_command('AlderMutate', function(o)
   require('alder.test').mutate_for_current({ args = o.fargs })
 end, { nargs = '*', desc = 'alder test --mutate [args] in the background: survivors in the quickfix list' })
 
+vim.api.nvim_create_user_command('AlderRepl', function()
+  require('alder.repl').for_current()
+end, { desc = 'alder repl --in <this module> in a split (focuses a running one)' })
+
 vim.api.nvim_create_user_command('AlderDiagnostics', function()
   require('alder.keys').actions.diagnostics()
 end, { desc = 'alder diagnostics of the open buffers in the quickfix list' })

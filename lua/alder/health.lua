@@ -17,8 +17,15 @@ function M.check()
     h.ok(vim.trim(v.stdout or '') ~= '' and vim.trim(v.stdout) or cmd)
     -- an old alder exits 0 and prints text for `help --json`: only a command tree counts
     local help = vim.system({ cmd, 'help', '--json' }, { text = true }):wait()
-    if help.code == 0 and require('alder.commands').decode_tree(help.stdout) then
+    local commands = require('alder.commands')
+    local tree = help.code == 0 and commands.decode_tree(help.stdout)
+    if tree then
       h.ok('`alder help --json` works (completion and :AlderGenerate)')
+      if commands.tree_has_flag(tree, { 'repl' }, '--in') then
+        h.ok('`alder repl --in` (the REPL speaks as the buffer\'s module)')
+      else
+        h.warn('this alder has no `repl --in`: <leader>ax opens the REPL in app scope; build a newer one')
+      end
     else
       h.error('`alder help --json` failed: this alder predates editor support; build a newer one')
     end

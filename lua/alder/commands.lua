@@ -52,9 +52,8 @@ local function child(list, name)
   end
 end
 
--- find walks the tree along words (`{'new', 'page'}`) and returns the deepest command reached.
-function M.find(words)
-  local t = M.tree()
+-- find_in walks tree along words (`{'new', 'page'}`) and returns the deepest command reached.
+local function find_in(t, words)
   if not t then return nil end
   local node, list = nil, t.commands
   for _, w in ipairs(words) do
@@ -65,11 +64,24 @@ function M.find(words)
   return node
 end
 
+-- find is find_in on the session's cached tree.
+function M.find(words) return find_in(M.tree(), words) end
+
 local function flag(node, name)
   for _, f in ipairs(node and node.flags or {}) do
     if f.name == name then return f end
   end
 end
+
+-- tree_has_flag reports whether the command at words in tree (a decoded `alder help --json`)
+-- lists the flag; only that exact command counts, not an ancestor reached instead.
+function M.tree_has_flag(tree, words, name)
+  local node = find_in(tree, words)
+  return node ~= nil and node.name == words[#words] and flag(node, name) ~= nil
+end
+
+-- has_flag is tree_has_flag on the session's cached tree.
+function M.has_flag(words, name) return M.tree_has_flag(M.tree(), words, name) end
 
 function M.complete(arglead, cmdline)
   local t = M.tree()

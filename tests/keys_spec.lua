@@ -10,8 +10,8 @@ local function blog_buf(rel)
   return buf, dst
 end
 
-local function mapped(lhs)
-  return vim.fn.maparg(vim.keycode(lhs), 'n', false, true).buffer == 1
+local function mapped(lhs, mode)
+  return vim.fn.maparg(vim.keycode(lhs), mode or 'n', false, true).buffer == 1
 end
 
 -- with_opts runs f with config.options replaced, restoring the suite's options even when f fails.
@@ -40,6 +40,10 @@ test('keys: ag ac ae ar at are buffer-local; aa is gone (plan 2)', function()
   assert(not mapped('<leader>aa'))
   assert(mapped('<leader>aT'), '<leader>aT not mapped')
   assert(mapped('<leader>am'), '<leader>am not mapped')
+  assert(mapped('<leader>ax'), '<leader>ax not mapped')
+  assert(not mapped('<leader>ax', 'x'), '<leader>ax is normal mode only')
+  assert(mapped('<leader>as'), '<leader>as not mapped in normal mode')
+  assert(mapped('<leader>as', 'x'), '<leader>as not mapped in visual mode')
 end)
 
 test('keys: false disables one key', function()
@@ -63,6 +67,16 @@ test('keys: false disables one key', function()
     blog_buf('app/Post.alder')
     assert(not mapped('<leader>am'))
     assert(mapped('<leader>at'))
+  end)
+  with_opts({ keys = { repl = false } }, function()
+    blog_buf('app/Post.alder')
+    assert(not mapped('<leader>ax'))
+    assert(mapped('<leader>as'))
+  end)
+  with_opts({ keys = { send = false } }, function()
+    blog_buf('app/Post.alder')
+    assert(not mapped('<leader>as') and not mapped('<leader>as', 'x'))
+    assert(mapped('<leader>ax'))
   end)
 end)
 

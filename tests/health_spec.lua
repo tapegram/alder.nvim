@@ -66,3 +66,28 @@ test('health: a missing alder is an error', function()
   cfg.options.cmd = saved
   assert(errors_matching(reports, 'not on PATH') >= 1, vim.inspect(reports))
 end)
+
+local function warns_matching(reports, pat)
+  local n = 0
+  for _, r in ipairs(reports) do
+    if r[1] == 'warn' and r[2]:find(pat) then n = n + 1 end
+  end
+  return n
+end
+
+test('health: the current alder has repl --in, and says so', function()
+  assert(require('alder.commands').has_flag({ 'repl' }, '--in'))
+  local reports = capture()
+  assert(warns_matching(reports, 'repl %-%-in') == 0, vim.inspect(reports))
+end)
+
+test('health: an alder whose repl lacks --in is a warning, judged from the tree it just ran', function()
+  -- the cached tree (the real alder's) has --in; the check must use the fake one's help --json
+  assert(require('alder.commands').has_flag({ 'repl' }, '--in'))
+  local tree = '{"commands":[{"name":"repl","flags":[{"name":"--module"}]}]}'
+  with_cmd('case "$1" in version) echo "alder old";; *) echo \'' .. tree .. '\';; esac', function()
+    local reports = capture()
+    assert(warns_matching(reports, 'repl %-%-in') == 1, vim.inspect(reports))
+    assert(errors_matching(reports, 'help %-%-json') == 0, vim.inspect(reports))
+  end)
+end)
