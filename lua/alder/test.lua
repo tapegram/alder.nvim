@@ -160,4 +160,31 @@ function M.for_current(o)
   if r then M.run(r, o) end
 end
 
+-- run_pattern is the -run regexp selecting one test (`^Module "name"$`) or, without a name,
+-- every test of the module. name is the source text between the test's quotes, which is how
+-- alder names the test (escapes included, `a \"c\"`); its Go regexp metacharacters, backslash
+-- too, are escaped.
+function M.run_pattern(module, name)
+  if not name then return '^' .. module .. ' ' end
+  local escaped = name:gsub('[%^%$%(%)%%%.%[%]%*%+%-%?%{%}%|\\]', '\\%0')
+  return '^' .. module .. ' "' .. escaped .. '"$'
+end
+
+-- at_cursor runs the test under the cursor, or the current module's tests when none is above
+-- it, or the whole suite outside a module.
+function M.at_cursor()
+  local buf = require('alder.buf')
+  local b = vim.api.nvim_get_current_buf()
+  local module = buf.module_name(b)
+  if not module then
+    vim.notify('alder test: no `module` line in this buffer; running every test', vim.log.levels.WARN)
+    return M.for_current()
+  end
+  local name = buf.test_at(b, vim.api.nvim_win_get_cursor(0)[1] - 1)
+  if not name then
+    vim.notify('alder test: no test above the cursor; running ' .. module .. "'s tests", vim.log.levels.INFO)
+  end
+  M.for_current({ args = { '-run', M.run_pattern(module, name) } })
+end
+
 return M

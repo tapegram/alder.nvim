@@ -6,6 +6,7 @@ M.actions = {
   explain = function() require('alder.check').explain() end,
   run = function() require('alder.commands').alder({ 'run' }) end,
   test = function() require('alder.test').for_current() end,
+  test_at = function() require('alder.test').at_cursor() end,
 }
 
 local DESC = {
@@ -14,6 +15,7 @@ local DESC = {
   explain = 'alder: explain the diagnostic',
   run = 'alder: run',
   test = 'alder: run the tests',
+  test_at = 'alder: run the test under the cursor',
 }
 
 local function mapped()

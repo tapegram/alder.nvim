@@ -129,3 +129,62 @@ test('test: a failed result without a line warns once (an older alder)', functio
   restore()
   assert(#msgs == 0, vim.inspect(msgs))
 end)
+
+-- at_cursor_run runs test.at_cursor and waits for the run to finish.
+local function at_cursor_run()
+  local T = require('alder.test')
+  local orig, done = T.for_current, false
+  T.for_current = function(o) o = o or {}; o.on_done = function() done = true end; orig(o) end
+  local ok, err = pcall(function()
+    T.at_cursor()
+    assert(H.wait(120000, function() return done end), 'did not finish')
+  end)
+  T.for_current = orig
+  if not ok then error(err, 0) end
+end
+
+local function last_msg(msgs) return msgs[#msgs] and msgs[#msgs].msg end
+
+test('test: <leader>aT runs only the test under the cursor', function()
+  local app = H.new_app()
+  local file = app .. '/app/Demo.alder'
+  H.write(file, 'module Demo\n\ntest "bad (1)" = 1 == 2\ntest "good" = 1 == 1\n')
+  vim.cmd.edit(file)
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
+  local msgs, restore = H.capture_notify()
+  local ok, err = pcall(at_cursor_run)
+  restore()
+  assert(ok, err)
+  assert(#vim.fn.getqflist() == 0, 'the bad test ran: ' .. vim.inspect(vim.fn.getqflist()))
+  assert(last_msg(msgs):find('1 passed, 0 failed', 1, true), vim.inspect(msgs))
+  vim.api.nvim_win_set_cursor(0, { 3, 0 })
+  msgs, restore = H.capture_notify()
+  ok, err = pcall(at_cursor_run)
+  restore()
+  assert(ok, err)
+  assert(#vim.fn.getqflist() == 1 and vim.fn.getqflist()[1].text:find('bad (1)', 1, true), vim.inspect(vim.fn.getqflist()))
+  assert(last_msg(msgs):find('0 passed, 1 failed', 1, true), vim.inspect(msgs))
+end)
+
+test('test: <leader>aT selects a name with regexp metacharacters and quotes, in a nested module', function()
+  local app = H.new_app()
+  local file = app .. '/app/Todos/Index.alder'
+  vim.fn.mkdir(app .. '/app/Todos', 'p')
+  H.write(file, 'module Todos.Index\n\ntest "a (b) \\"c\\"" = 1 == 2\ntest "a (b) c" = 1 == 1\ntest "plain" = 1 == 1\n')
+  vim.cmd.edit(file)
+  vim.api.nvim_win_set_cursor(0, { 3, 0 })
+  local msgs, restore = H.capture_notify()
+  local ok, err = pcall(at_cursor_run)
+  restore()
+  assert(ok, err)
+  local qf = vim.fn.getqflist()
+  assert(#qf == 1 and qf[1].text:find('a (b) \\"c\\"', 1, true), vim.inspect(qf))
+  assert(last_msg(msgs):find('0 passed, 1 failed', 1, true), vim.inspect(msgs))
+  vim.cmd('cclose') -- the failure opened the list and took focus
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
+  msgs, restore = H.capture_notify()
+  ok, err = pcall(at_cursor_run)
+  restore()
+  assert(ok, err)
+  assert(#vim.fn.getqflist() == 0 and last_msg(msgs):find('1 passed, 0 failed', 1, true), vim.inspect(msgs))
+end)
