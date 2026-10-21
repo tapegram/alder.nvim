@@ -19,6 +19,10 @@ jobs:
           repository: nvim-treesitter/nvim-treesitter
           ref: main
           path: nvim-treesitter
+      - uses: actions/checkout@v4
+        with:
+          repository: MunifTanjim/nui.nvim
+          path: nui.nvim
       - uses: actions/setup-go@v5
         with:
           go-version-file: alder/go.mod
@@ -37,4 +41,5 @@ jobs:
         run: nvim --headless -u tests/minimal.lua -l tests/run.lua
         env:
           NVIM_TS: ${{ github.workspace }}/nvim-treesitter
+          NVIM_NUI: ${{ github.workspace }}/nui.nvim
           ALDER_REPO: ${{ github.workspace }}/alder
