@@ -55,18 +55,32 @@ function M.lines(items)
 end
 
 -- fetch calls cb(items) with the routes of the app at root, or cb(nil, message) on failure.
+-- The LSP is asked first; if there is no client or it answers with an error (an alder older
+-- than alder/routes), the CLI is tried.
 function M.fetch(root, cb)
   local c = require('alder.lsp').project_client(root, vim.api.nvim_get_current_buf())
   if c then
     local sent = c:request('alder/routes', vim.empty_dict(), function(err, result)
-      if err then return cb(nil, err.message) end
+      if err then return M.fetch_cli(root, cb, err) end
       cb(M.normalize_lsp(require('alder.ui').plain(result) or {}))
     end)
     if sent ~= false then return end
   end
+  M.fetch_cli(root, cb)
+end
+
+-- fetch_cli runs `alder routes --json`. lsp_err is the LSP's error when it was asked first: if
+-- both fail, the server and the binary predate routes, so the message says how to fix that.
+function M.fetch_cli(root, cb, lsp_err)
   local cli = require('alder.cli')
   cli.run({ 'routes', '--json' }, { cwd = root }, function(res)
-    if res.code ~= 0 then return cb(nil, vim.trim(res.stderr ~= '' and res.stderr or res.stdout)) end
+    if res.code ~= 0 then
+      if lsp_err then
+        return cb(nil, 'this alder has no routes command (' .. lsp_err.message .. '): update alder'
+          .. ' (go install ./cmd/alder in the alder repo), then :LspRestart')
+      end
+      return cb(nil, vim.trim(res.stderr ~= '' and res.stderr or res.stdout))
+    end
     -- a JSON array (or {routes=…}) is decoded whole; cli.decode (res.objects) only reads JSONL
     local ok, v = pcall(vim.json.decode, res.stdout, { luanil = { object = true, array = true } })
     local objects

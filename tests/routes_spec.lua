@@ -101,6 +101,51 @@ test('routes: with no client fetch falls back to alder routes --json', function(
   assert(#got == 1 and got[1].file == root .. '/app/Sites/Clarity/Index.alder' and got[1].lnum == 2 and got[1].col == 2, vim.inspect(got))
 end)
 
+-- an LSP client whose server answers alder/routes with an error (an older alder: MethodNotFound)
+local function failing_client()
+  return { request = function(_, _, _, handler)
+    handler({ code = -32601, message = 'unknown method alder/routes' }, nil)
+    return true
+  end }
+end
+
+test('routes: an LSP error falls back to alder routes --json', function()
+  local root = project()
+  local script = H.tmpdir() .. '/fake-alder'
+  H.write(script, '#!/bin/sh\n[ "$1 $2" = "routes --json" ] || exit 2\n'
+    .. [[echo '[{"kind":"page","path":"/sites/:id","module":"Sites.Clarity.Index","name":"page","file":"app/Sites/Clarity/Index.alder","line":2,"col":3}]']] .. '\n')
+  vim.uv.fs_chmod(script, tonumber('755', 8))
+  local lsp, saved, cmd = require('alder.lsp'), require('alder.lsp').project_client, config.options.cmd
+  lsp.project_client = failing_client
+  config.options.cmd = script
+  local got
+  local ok, err = pcall(function()
+    routes.fetch(root, function(items) got = items end)
+    assert(H.wait(5000, function() return got ~= nil end), 'no answer')
+  end)
+  lsp.project_client, config.options.cmd = saved, cmd
+  assert(ok, err)
+  assert(#got == 1 and got[1].lnum == 2, vim.inspect(got))
+end)
+
+test('routes: an alder too old for routes says to update it and restart the LSP', function()
+  local root = project()
+  local script = H.tmpdir() .. '/old-alder'
+  H.write(script, '#!/bin/sh\necho "usage: alder new <name> | alder check [dir]" >&2\nexit 2\n')
+  vim.uv.fs_chmod(script, tonumber('755', 8))
+  local lsp, saved, cmd = require('alder.lsp'), require('alder.lsp').project_client, config.options.cmd
+  lsp.project_client = failing_client
+  config.options.cmd = script
+  local done, msg
+  local ok, err = pcall(function()
+    routes.fetch(root, function(items, e) done, msg = true, e; assert(items == nil) end)
+    assert(H.wait(5000, function() return done end), 'no answer')
+  end)
+  lsp.project_client, config.options.cmd = saved, cmd
+  assert(ok, err)
+  assert(msg:find('update alder', 1, true) and msg:find(':LspRestart', 1, true), msg)
+end)
+
 test('routes: pick lists the routes, filters on the path and jumps to the choice', function()
   local root = project()
   local items = routes.normalize_lsp(lsp_result(root))
