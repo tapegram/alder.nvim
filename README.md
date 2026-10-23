@@ -64,7 +64,7 @@ require('alder').setup({
   check_on_save = true, -- run alder check after writing an .alder file
   preview = true,       -- the `:Alder` CLI path shows the diff first; <CR> applies, q discards (not the modal)
   lsp = true,           -- start `alder lsp` for .alder buffers; false keeps CLI mode
-  keys = {              -- buffer-local maps in .alder files; each can be false
+  keys = {              -- each can be false; generate/run/test/repl/routes are global (see Keys)
     generate = '<leader>ag',
     diagnostics = '<leader>ac',
     explain = '<leader>ae',
@@ -73,6 +73,7 @@ require('alder').setup({
     test_at = '<leader>aT',
     mutate = '<leader>am',
     repl = '<leader>ax',
+    routes = '<leader>au',
     send = '<leader>as',
   },
   revision = nil,       -- install the grammar from this tag of tapegram/alder, e.g. 'v0.2.0'
@@ -98,12 +99,23 @@ run so the grammar matches your compiler.
 | `:AlderDiagnostics` | the buffers' diagnostics in the quickfix list (`<leader>ac`) |
 | `:AlderTest [args]` | `alder test`: failures land in the quickfix list at their `test` line, compile errors as diagnostics |
 | `:AlderMutate [args]` | `alder test --mutate` in the background: the survivors land in the quickfix list at the mutated expression, `before → after` |
+| `:AlderRoutes` | the app's routes in a fuzzy picker (filter on the path); select one to jump to its declaration |
 | `:AlderRepl` | `alder repl --in <this module>` in a split |
 | `:Alder <args…>` | any `alder` command, with completion; it writes to disk through the CLI |
 
 ## Keys
 
-In `.alder` buffers:
+Two groups. The **project-level** maps work in any buffer (a terminal, a README, `:enew`) when the
+buffer's file or the cwd is inside an Alder project (an `app/` directory above it); anywhere else
+they say `alder: not in an Alder project`. The **buffer-only** maps exist only in `.alder` buffers.
+
+Project-level (global): `<leader>ag` (generator modal; from a non-`.alder` buffer it opens the app's
+`app/App.alder` first), `<leader>ar` (run), `<leader>at` (test), `<leader>ax` (REPL, in app scope
+outside an `.alder` buffer), `<leader>au` (routes).
+
+Buffer-only (`.alder` buffers): `<leader>ac`, `<leader>ae`, `<leader>aT`, `<leader>am`, `<leader>as`.
+
+All of them:
 
 | Key | What it does |
 |---|---|
@@ -115,11 +127,12 @@ In `.alder` buffers:
 | `<leader>aT` | run the test under the cursor (the module's tests when none is above it) |
 | `<leader>am` | `alder test --mutate` in the background; the survivors land in the quickfix list at the mutated expression, `before → after` |
 | `<leader>ax` | open `alder repl --in <this module>` in a split |
+| `<leader>au` | the routes picker (`:AlderRoutes`): `GET /sites/:id  Sites.Clarity.Index.page` (`POST` for a msg), fuzzy-filtered on the path, `<CR>` jumps to the declaration; asks the language server (`alder/routes`), else runs `alder routes --json` |
 | `<leader>as` | send the current line (normal mode) or the selection (visual mode) to the REPL |
 
 `repl --in` needs an `alder` built from this change or later; `:checkhealth alder` says whether yours has it.
 
-Each can be set to `false` in `opts.keys`. With which-key, `<leader>a` is the group "alder".
+Each can be set to `false` in `opts.keys`, project-level ones too. With which-key, `<leader>a` is the group "alder".
 
 Fixes and the generators that apply at the cursor are in Neovim's own code-action menu (`gra`); picking a generator there opens the modal preset.
 
@@ -162,7 +175,9 @@ search line over the generators (those that apply at the cursor first), the chos
 generator's form, and a live preview of the diff that updates as you type. `<Tab>` moves
 between fields, `<CR>` applies when every field is valid (else it jumps to the first that is
 not), `<C-o>` opens the full review (what the plan leaves to you, file by file), `<Esc>`
-closes. The modal needs [nui.nvim](https://github.com/MunifTanjim/nui.nvim); without it,
+closes. A module-name field shows where the name lands (`Sites.Clarity.Index → app/Sites/Clarity/Index.alder`)
+and suggests the existing folders under `app/` as dotted prefixes (`Sites.`, `Sites.Clarity.`);
+`<Up>`/`<Down>` pick one, `<C-y>` completes it. The modal needs [nui.nvim](https://github.com/MunifTanjim/nui.nvim); without it,
 `<leader>ag` says so and `:Alder <words>` still runs the CLI. The server plans the change on a copy of
 your app, built from your buffers, and the plugin puts the result into **buffers**:
 

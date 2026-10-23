@@ -318,6 +318,22 @@ render_form = function()
     end
     if #shown > 0 then vim.api.nvim_buf_set_extmark(buf, ns, s.focus - 1, 0, { virt_lines = shown }) end
   end
+  if f and f.kind == 'module' then
+    s.module_dirs = s.module_dirs or form.module_dirs(require('alder.project').root(s.buf) or vim.fn.getcwd())
+    local text = s.typed[f.name]
+    if text == nil then text = f.value or '' end
+    if text:match('^<') then text = '' end -- the server's placeholder (`<Module>`), not a name
+    local shown = { { { form.module_help(text), 'Comment' } } }
+    local sug = form.module_suggest(s.module_dirs, text)
+    s.suggestions = sug
+    s.spick = math.max(1, math.min(s.spick or 1, math.max(#sug, 1)))
+    for k = 1, math.min(#sug, 5) do
+      shown[#shown + 1] = { { (k == s.spick and '▸ ' or '  ') .. sug[k], k == s.spick and 'PmenuSel' or 'Pmenu' }, k == s.spick and { '  <C-y> completes', 'Comment' } or nil }
+    end
+    vim.api.nvim_buf_set_extmark(buf, ns, s.focus - 1, 0, { virt_lines = shown })
+  else
+    s.suggestions = nil
+  end
   local sel = M.selected()
   s.popups.form.border:set_text('top', sel and (' ' .. sel.id .. '  ' .. (sel.summary or '') .. ' ') or ' Form ', 'left')
 end
@@ -328,7 +344,7 @@ function M.set_field(name, text)
   local s = M.state
   if not s then return end
   s.typed[name] = text
-  s.pick, s.moved = 1, true
+  s.pick, s.moved, s.spick = 1, true, 1
   render_form()
   M.request_preview()
 end
@@ -383,6 +399,27 @@ function M.option(delta)
   if n == 0 then return false end
   s.pick = ((((s.pick or 1) + delta) - 1) % n) + 1
   s.moved = true
+  render_form()
+  return true
+end
+
+-- accept_suggestion completes the focused module field with the picked folder prefix.
+function M.accept_suggestion()
+  local s = M.state
+  local f = s and s.focus and s.fields[s.focus]
+  if not f or f.kind ~= 'module' or not s.suggestions or #s.suggestions == 0 then return false end
+  local pick = s.suggestions[math.max(1, math.min(s.spick or 1, #s.suggestions))]
+  s.spick = 1
+  M.set_field(f.name, pick)
+  return true
+end
+
+-- suggest moves through the module suggestions; false when there are none.
+function M.suggest(delta)
+  local s = M.state
+  local f = s and s.focus and s.fields[s.focus]
+  if not f or f.kind ~= 'module' or not s.suggestions or #s.suggestions < 2 then return false end
+  s.spick = ((((s.spick or 1) + delta) - 1) % math.min(#s.suggestions, 5)) + 1
   render_form()
   return true
 end
@@ -465,9 +502,18 @@ function M.form_keys()
   map('<C-o>', function() M.review() end)
   map('<Esc>', function() M.close() end)
   map('<C-c>', function() M.close() end)
+  map('<C-y>', function()
+    if M.accept_suggestion() then
+      local row = M.state and M.state.focus
+      if row then
+        local line = vim.api.nvim_buf_get_lines(M.state.bufs.form, row - 1, row, false)[1] or ''
+        pcall(vim.api.nvim_win_set_cursor, M.state.win.form, { row, #line })
+      end
+    end
+  end)
   for lhs, delta in pairs({ ['<Down>'] = 1, ['<C-n>'] = 1, ['<Up>'] = -1, ['<C-p>'] = -1 }) do
     map(lhs, function()
-      if not M.option(delta) then
+      if not M.option(delta) and not M.suggest(delta) then
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(delta > 0 and '<Down>' or '<Up>', true, false, true), 'n', false)
       end
     end)

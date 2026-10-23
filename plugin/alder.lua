@@ -13,6 +13,9 @@ vim.api.nvim_create_autocmd('User', {
 
 require('alder.parser').register()
 
+-- the project-level maps (generate, run, test, REPL, routes) work in any buffer of a project; setup() redoes them
+require('alder.keys').attach_global()
+
 vim.api.nvim_create_autocmd('FileType', {
   group = group,
   pattern = 'alder',
@@ -56,6 +59,10 @@ end, { nargs = '*', desc = 'alder test --mutate [args] in the background: surviv
 vim.api.nvim_create_user_command('AlderRepl', function()
   require('alder.repl').for_current()
 end, { desc = 'alder repl --in <this module> in a split (focuses a running one)' })
+
+vim.api.nvim_create_user_command('AlderRoutes', function()
+  require('alder.routes').pick()
+end, { desc = 'the routes of the app in a fuzzy picker; select one to jump to its declaration' })
 
 vim.api.nvim_create_user_command('AlderDiagnostics', function()
   require('alder.keys').actions.diagnostics()

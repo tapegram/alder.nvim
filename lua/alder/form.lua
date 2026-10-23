@@ -79,4 +79,52 @@ function M.first_invalid(fields)
   end
 end
 
+-- ── Module names ─────────────────────────────────────────────────────────────
+
+M.MODULE_EXAMPLE = 'Sites.Clarity.Index'
+
+-- module_dirs are the folders under root/app as dotted prefixes (`Sites.`, `Sites.Clarity.`),
+-- shallow first, then alphabetical. Only capitalised folders can hold modules.
+function M.module_dirs(root)
+  local out = {}
+  local function walk(dir, prefix)
+    for name, typ in vim.fs.dir(dir) do
+      if typ == 'directory' and name:match('^%u') then
+        out[#out + 1] = prefix .. name .. '.'
+        walk(dir .. '/' .. name, prefix .. name .. '.')
+      end
+    end
+  end
+  walk(root .. '/app', '')
+  table.sort(out, function(a, b)
+    local da, db = select(2, a:gsub('%.', '')), select(2, b:gsub('%.', ''))
+    if da ~= db then return da < db end
+    return a < b
+  end)
+  return out
+end
+
+-- module_path is the file a module name is written to, relative to the app root.
+function M.module_path(name) return 'app/' .. name:gsub('%.', '/') .. '.alder' end
+
+-- module_help says where the name lands: the typed name (a trailing dot gets `Index`), else the example.
+function M.module_help(text)
+  local name = text or ''
+  if name == '' then name = M.MODULE_EXAMPLE
+  elseif name:sub(-1) == '.' then name = name .. 'Index' end
+  return name .. ' → ' .. M.module_path(name)
+end
+
+-- module_suggest are the folder prefixes that complete text: those starting with it (fuzzy when
+-- none do), not the text itself.
+function M.module_suggest(dirs, text)
+  if text == nil or text == '' then return vim.list_slice(dirs) end
+  local out = {}
+  for _, d in ipairs(dirs) do
+    if d ~= text and vim.startswith(d, text) then out[#out + 1] = d end
+  end
+  if #out == 0 and text:sub(-1) ~= '.' then out = vim.fn.matchfuzzy(dirs, text) end
+  return out
+end
+
 return M

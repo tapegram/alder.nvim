@@ -17,5 +17,6 @@ vim.cmd('filetype plugin indent on')
 vim.fn.mkdir(data .. '/site', 'p')
 require('nvim-treesitter').setup({ install_dir = data .. '/site' })
 vim.cmd('runtime plugin/matchit.vim') -- -l skips plugin loading; a normal Neovim loads it itself
+vim.g.mapleader = ' ' -- before the plugin loads, as in a real config
 vim.cmd('runtime plugin/alder.lua')
 require('alder').setup({ path = os.getenv('ALDER_REPO') or vim.fn.expand('~/projects/alder') })

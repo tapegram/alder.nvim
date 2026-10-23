@@ -466,3 +466,35 @@ test('modal: a request the closing server refuses clears updating and says why',
     assert(text_of(s.bufs.preview):find('alder lsp stopped', 1, true), text_of(s.bufs.preview))
   end)
 end)
+
+local function form_virt(s)
+  local out = {}
+  for _, m in ipairs(vim.api.nvim_buf_get_extmarks(s.bufs.form, -1, 0, -1, { details = true })) do
+    for _, vl in ipairs(m[4].virt_lines or {}) do
+      local t = {}
+      for _, chunk in ipairs(vl) do t[#t + 1] = chunk[1] end
+      out[#out + 1] = table.concat(t)
+    end
+  end
+  return table.concat(out, '\n')
+end
+
+test('modal: a module field shows where the name lands and suggests existing folders (#15)', function()
+  sized(140, function()
+    local buf = blog_buf('app/Posts/Index.alder')
+    local s = open(buf, { generator = 'new page' })
+    assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end), 'no preview')
+    local row
+    for i, f in ipairs(s.fields) do
+      if f.kind == 'module' then row = i break end
+    end
+    assert(row, 'new page has no module field')
+    modal.focus_field(row)
+    modal.set_field(s.fields[row].name, 'Pos')
+    local text = form_virt(s)
+    assert(text:find('→ app/', 1, true), text)
+    assert(text:find('Posts.', 1, true), text)
+    assert(modal.accept_suggestion(), 'nothing to accept')
+    assert(s.typed[s.fields[row].name] == 'Posts.', vim.inspect(s.typed))
+  end)
+end)

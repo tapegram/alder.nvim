@@ -41,7 +41,7 @@ end
 -- require_for_buf is for_buf for a command that needs an app: with none it says so and
 -- returns nil.
 function M.require_for_buf(buf)
-  local r = M.for_buf(buf)
+  local r = M.for_buf(buf) or M.find(vim.fn.getcwd())
   if not r then vim.notify('alder: no `app/` directory above this file', vim.log.levels.ERROR) end
   return r
 end

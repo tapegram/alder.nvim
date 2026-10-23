@@ -6,7 +6,7 @@ M.defaults = {
   preview = true, -- generators show their diff before writing
   path = nil, -- an alder checkout to install the parser from (grammar development)
   lsp = true, -- attach `alder lsp`; false keeps CLI mode
-  keys = { generate = '<leader>ag', diagnostics = '<leader>ac', explain = '<leader>ae', run = '<leader>ar', test = '<leader>at', test_at = '<leader>aT', mutate = '<leader>am', repl = '<leader>ax', send = '<leader>as' }, -- each can be false
+  keys = { generate = '<leader>ag', diagnostics = '<leader>ac', explain = '<leader>ae', run = '<leader>ar', test = '<leader>at', test_at = '<leader>aT', mutate = '<leader>am', repl = '<leader>ax', routes = '<leader>au', send = '<leader>as' }, -- each can be false
   revision = nil, -- a tag of tapegram/alder to install the parser from, e.g. 'v0.2.0'
 }
 

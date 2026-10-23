@@ -116,7 +116,7 @@ function M.alder(fargs)
   end
   if not cli.available() then return end
   M.refresh()
-  local app_root = require('alder.root').for_buf(0)
+  local app_root = require('alder.project').root(0)
   if name == 'check' then
     require('alder.check').for_current({ open_qf = true })
     return

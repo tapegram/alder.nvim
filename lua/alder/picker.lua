@@ -4,10 +4,12 @@ local M = {}
 
 -- filter is the items whose `id summary` fuzzy-match query, best first; a copy of all of them,
 -- in the server's order (here first), for an empty query.
-function M.filter(items, query)
+-- text(item), when given, is the string to match instead (the routes picker matches paths).
+function M.filter(items, query, text)
   if query == nil or query == '' then return vim.list_slice(items) end
+  text = text or function(it) return it.id .. ' ' .. (it.summary or '') end
   local keyed = {}
-  for _, it in ipairs(items) do keyed[#keyed + 1] = { text = it.id .. ' ' .. (it.summary or ''), item = it } end
+  for _, it in ipairs(items) do keyed[#keyed + 1] = { text = text(it), item = it } end
   local out = {}
   for _, k in ipairs(vim.fn.matchfuzzy(keyed, query, { key = 'text' })) do out[#out + 1] = k.item end
   return out

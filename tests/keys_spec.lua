@@ -14,12 +14,20 @@ local function mapped(lhs, mode)
   return vim.fn.maparg(vim.keycode(lhs), mode or 'n', false, true).buffer == 1
 end
 
+-- gmapped: a global (project-level) map, which a buffer-local one would shadow.
+local function gmapped(lhs, mode)
+  local m = vim.fn.maparg(vim.keycode(lhs), mode or 'n', false, true)
+  return m.lhs ~= nil and m.buffer == 0
+end
+
 -- with_opts runs f with config.options replaced, restoring the suite's options even when f fails.
 local function with_opts(opts, f)
   local saved = config.options
   config.options = vim.tbl_deep_extend('force', vim.deepcopy(saved), opts)
+  require('alder.keys').attach_global()
   local ok, err = pcall(f)
   config.options = saved
+  require('alder.keys').attach_global()
   if not ok then error(err, 0) end
 end
 
@@ -34,14 +42,16 @@ end
 test('keys: ag ac ae ar at are buffer-local; aa is gone (plan 2)', function()
   vim.g.mapleader = ' '
   blog_buf('app/Post.alder')
-  for _, k in ipairs({ '<leader>ag', '<leader>ac', '<leader>ae', '<leader>ar', '<leader>at' }) do
+  for _, k in ipairs({ '<leader>ac', '<leader>ae' }) do
     assert(mapped(k), k .. ' not mapped')
+  end
+  for _, k in ipairs({ '<leader>ag', '<leader>ar', '<leader>at', '<leader>ax', '<leader>au' }) do
+    assert(gmapped(k) and not mapped(k), k .. ' is not a project-level map')
   end
   assert(not mapped('<leader>aa'))
   assert(mapped('<leader>aT'), '<leader>aT not mapped')
   assert(mapped('<leader>am'), '<leader>am not mapped')
-  assert(mapped('<leader>ax'), '<leader>ax not mapped')
-  assert(not mapped('<leader>ax', 'x'), '<leader>ax is normal mode only')
+  assert(not gmapped('<leader>ax', 'x'), '<leader>ax is normal mode only')
   assert(mapped('<leader>as'), '<leader>as not mapped in normal mode')
   assert(mapped('<leader>as', 'x'), '<leader>as not mapped in visual mode')
 end)
@@ -50,34 +60,81 @@ test('keys: false disables one key', function()
   vim.g.mapleader = ' '
   with_opts({ keys = { run = false } }, function()
     blog_buf('app/Post.alder')
-    assert(not mapped('<leader>ar'))
-    assert(mapped('<leader>ag'))
+    assert(not gmapped('<leader>ar'))
+    assert(gmapped('<leader>ag'))
   end)
   with_opts({ keys = { test = false } }, function()
     blog_buf('app/Post.alder')
-    assert(not mapped('<leader>at'))
-    assert(mapped('<leader>ar'))
+    assert(not gmapped('<leader>at'))
+    assert(gmapped('<leader>ar'))
   end)
   with_opts({ keys = { test_at = false } }, function()
     blog_buf('app/Post.alder')
     assert(not mapped('<leader>aT'))
-    assert(mapped('<leader>at'))
+    assert(gmapped('<leader>at'))
   end)
   with_opts({ keys = { mutate = false } }, function()
     blog_buf('app/Post.alder')
     assert(not mapped('<leader>am'))
-    assert(mapped('<leader>at'))
+    assert(gmapped('<leader>at'))
   end)
   with_opts({ keys = { repl = false } }, function()
     blog_buf('app/Post.alder')
-    assert(not mapped('<leader>ax'))
+    assert(not gmapped('<leader>ax'))
     assert(mapped('<leader>as'))
   end)
   with_opts({ keys = { send = false } }, function()
     blog_buf('app/Post.alder')
     assert(not mapped('<leader>as') and not mapped('<leader>as', 'x'))
-    assert(mapped('<leader>ax'))
+    assert(gmapped('<leader>ax'))
   end)
+end)
+
+test('keys: false disables the routes picker', function()
+  vim.g.mapleader = ' '
+  with_opts({ keys = { routes = false } }, function()
+    assert(not gmapped('<leader>au'))
+    assert(gmapped('<leader>ag'))
+  end)
+  assert(gmapped('<leader>au'), 'restored')
+end)
+
+test('keys: project maps work in a non-alder buffer inside a project; buffer maps do not', function()
+  vim.g.mapleader = ' '
+  local dst = H.tmpdir() .. '/blog'
+  H.copy_tree(H.alder_repo() .. '/examples/blog', dst)
+  local old = vim.fn.getcwd()
+  vim.cmd.cd(dst)
+  local ok, err = pcall(function()
+    vim.cmd.enew()
+    assert(gmapped('<leader>ag') and gmapped('<leader>ax') and gmapped('<leader>au'))
+    assert(not mapped('<leader>ac') and not mapped('<leader>as'), 'buffer-only maps leaked')
+    vim.api.nvim_feedkeys(vim.keycode('<leader>ag'), 'x', false)
+    local modal = require('alder.modal')
+    assert(H.wait(15000, function() return modal.state ~= nil and modal.state.bufs ~= nil end), 'modal did not open')
+    assert(vim.bo[modal.state.buf].filetype == 'alder', 'the modal runs on an .alder buffer of the project')
+    modal.close()
+  end)
+  vim.cmd.cd(old)
+  assert(ok, err)
+end)
+
+test('keys: project maps outside an Alder project say so', function()
+  vim.g.mapleader = ' '
+  local old = vim.fn.getcwd()
+  vim.cmd.cd(H.tmpdir())
+  local messages, restore = H.capture_notify()
+  local ok, err = pcall(function()
+    vim.cmd.enew()
+    for _, k in ipairs({ '<leader>ag', '<leader>ax', '<leader>au', '<leader>at', '<leader>ar' }) do
+      vim.api.nvim_feedkeys(vim.keycode(k), 'x', false)
+    end
+  end)
+  restore()
+  vim.cmd.cd(old)
+  assert(ok, err)
+  assert(#messages == 5, vim.inspect(messages))
+  for _, m in ipairs(messages) do assert(m.msg == 'alder: not in an Alder project', m.msg) end
 end)
 
 test('keys: ag opens the generator modal', function()

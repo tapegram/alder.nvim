@@ -36,6 +36,18 @@ function M.client(buf)
   return vim.lsp.get_clients({ bufnr = buf, name = 'alder' })[1]
 end
 
+-- project_client is the alder client of the project at root (the one attached to buf, if any);
+-- failing that, any running alder client.
+function M.project_client(root_dir, buf)
+  local c = buf and M.client(buf)
+  if c then return c end
+  local clients = vim.lsp.get_clients({ name = 'alder' })
+  for _, k in ipairs(clients) do
+    if root_dir and k.root_dir and require('alder.root').real(k.root_dir) == require('alder.root').real(root_dir) then return k end
+  end
+  return clients[1]
+end
+
 -- request sends method to buf's server. cb gets the result; an error is shown once with the
 -- server's own message (a cancelled request, -32800, shows nothing) and on_err(err), when
 -- given, runs after it so a caller can clear its "updating" state.
