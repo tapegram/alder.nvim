@@ -67,6 +67,7 @@ function M.fetch(root, cb)
   local cli = require('alder.cli')
   cli.run({ 'routes', '--json' }, { cwd = root }, function(res)
     if res.code ~= 0 then return cb(nil, vim.trim(res.stderr ~= '' and res.stderr or res.stdout)) end
+    -- a JSON array (or {routes=…}) is decoded whole; cli.decode (res.objects) only reads JSONL
     local ok, v = pcall(vim.json.decode, res.stdout, { luanil = { object = true, array = true } })
     local objects
     if ok and type(v) == 'table' then objects = (v.routes or v) else objects = res.objects end

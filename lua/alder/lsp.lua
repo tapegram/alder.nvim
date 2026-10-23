@@ -37,7 +37,7 @@ function M.client(buf)
 end
 
 -- project_client is the alder client of the project at root (the one attached to buf, if any);
--- failing that, any running alder client.
+-- failing that, any alder client with the same root; nil otherwise.
 function M.project_client(root_dir, buf)
   local c = buf and M.client(buf)
   if c then return c end
@@ -45,7 +45,7 @@ function M.project_client(root_dir, buf)
   for _, k in ipairs(clients) do
     if root_dir and k.root_dir and require('alder.root').real(k.root_dir) == require('alder.root').real(root_dir) then return k end
   end
-  return clients[1]
+  return nil -- another project's server would list its routes and files
 end
 
 -- request sends method to buf's server. cb gets the result; an error is shown once with the

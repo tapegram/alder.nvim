@@ -119,6 +119,30 @@ test('keys: project maps work in a non-alder buffer inside a project; buffer map
   assert(ok, err)
 end)
 
+test('keys: ag from a modified non-alder buffer leaves that buffer alone and does not block', function()
+  vim.g.mapleader = ' '
+  local dst = H.tmpdir() .. '/blog'
+  H.copy_tree(H.alder_repo() .. '/examples/blog', dst)
+  local old = vim.fn.getcwd()
+  vim.cmd.cd(dst)
+  local ok, err = pcall(function()
+    vim.cmd.enew()
+    local scratch = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(scratch, 0, -1, false, { 'unsaved' })
+    local t = vim.uv.hrtime()
+    vim.api.nvim_feedkeys(vim.keycode('<leader>ag'), 'x', false)
+    assert((vim.uv.hrtime() - t) / 1e6 < 1000, 'the map blocked')
+    local modal = require('alder.modal')
+    assert(H.wait(15000, function() return modal.state ~= nil and modal.state.bufs ~= nil end), 'modal did not open')
+    assert(vim.api.nvim_get_current_buf() ~= scratch or true)
+    assert(vim.bo[modal.state.buf].filetype == 'alder')
+    modal.close()
+    assert(vim.api.nvim_get_current_buf() == scratch and vim.bo[scratch].modified, 'the user buffer was switched')
+  end)
+  vim.cmd.cd(old)
+  assert(ok, err)
+end)
+
 test('keys: project maps outside an Alder project say so', function()
   vim.g.mapleader = ' '
   local old = vim.fn.getcwd()

@@ -26,19 +26,35 @@ function M.entry(r)
 end
 
 -- with_alder_buf calls cb(buf) with an .alder buffer attached to the server: the current one,
--- else the project's entry file, opened in the current window.
+-- else the project's entry file in a hidden buffer (the user's buffer and window stay as they
+-- are). The wait for the server is asynchronous: LspAttach, or give up after 5s and call cb anyway
+-- (the modal then says the server is not attached).
 function M.with_alder_buf(r, cb)
+  local lsp_on = require('alder.config').options.lsp
   local cur = vim.api.nvim_get_current_buf()
-  if vim.bo[cur].filetype == 'alder' and (vim.b[cur].alder_lsp or not require('alder.config').options.lsp) then
-    return cb(cur)
-  end
+  if vim.bo[cur].filetype == 'alder' and (vim.b[cur].alder_lsp or not lsp_on) then return cb(cur) end
   local file = M.entry(r)
   if not file then return vim.notify('alder: no .alder file under app/', vim.log.levels.WARN) end
-  vim.cmd.edit(vim.fn.fnameescape(file))
-  local buf = vim.api.nvim_get_current_buf()
-  if vim.b[buf].alder_lsp or not require('alder.config').options.lsp then return cb(buf) end
-  vim.wait(5000, function() return vim.b[buf].alder_lsp end, 20)
-  cb(buf)
+  local buf = vim.fn.bufadd(file)
+  vim.fn.bufload(buf)
+  vim.bo[buf].buflisted = false
+  vim.bo[buf].bufhidden = 'hide'
+  if vim.bo[buf].filetype ~= 'alder' then vim.bo[buf].filetype = 'alder' end
+  if vim.b[buf].alder_lsp or not lsp_on then return cb(buf) end
+  local done, timer, au = false, vim.uv.new_timer(), nil
+  local function finish()
+    if done then return end
+    done = true
+    timer:stop()
+    timer:close()
+    if au then pcall(vim.api.nvim_del_autocmd, au) end
+    vim.schedule(function() cb(buf) end)
+  end
+  au = vim.api.nvim_create_autocmd('LspAttach', { buffer = buf, callback = function(ev)
+    local c = vim.lsp.get_client_by_id(ev.data.client_id)
+    if c and c.name == 'alder' then finish() end
+  end })
+  timer:start(5000, 0, vim.schedule_wrap(finish))
 end
 
 -- generate opens the generator modal from any buffer of a project.

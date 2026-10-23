@@ -27,6 +27,21 @@ local function with_cwd(dir, f)
   if not ok then error(err, 0) end
 end
 
+test('routes: project_client never returns another project\'s client', function()
+  local lsp = require('alder.lsp')
+  local saved = vim.lsp.get_clients
+  vim.lsp.get_clients = function() return { { name = 'alder', root_dir = '/other/proj' } } end
+  local got, same
+  local ok, err = pcall(function()
+    got = lsp.project_client('/this/proj')
+    same = lsp.project_client('/other/proj')
+  end)
+  vim.lsp.get_clients = saved
+  assert(ok, err)
+  assert(got == nil, vim.inspect(got))
+  assert(same and same.root_dir == '/other/proj')
+end)
+
 test('routes: label shows the verb, the path and the declaration', function()
   local items = routes.normalize_lsp(lsp_result('/x'))
   assert(routes.label(items[1]) == 'GET /sites/:id  Sites.Clarity.Index.page', routes.label(items[1]))
