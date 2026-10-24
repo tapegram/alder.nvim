@@ -11,8 +11,15 @@ local PENDING, VALUE, ERROR, NOTE = 'AlderScratchPending', 'AlderScratchValue', 
 
 local function split(s) return vim.split(s, '\n', { plain = true }) end
 
+-- cut is s up to max bytes, ending on a character boundary.
+local function cut(s, max)
+  local i = max
+  while i > 0 and s:byte(i + 1) and s:byte(i + 1) >= 0x80 and s:byte(i + 1) < 0xC0 do i = i - 1 end
+  return s:sub(1, i)
+end
+
 -- spec_of builds {virt_text, virt_lines} (chunk lists) for one watch.
-local function spec_of(w, phase)
+local function spec_of(w, phase, ran)
   local note = w.note and w.note ~= '' and w.note or nil
   local typ = w.type and w.type ~= '' and w.type or nil
   if w.error and w.error ~= '' then
@@ -23,12 +30,15 @@ local function spec_of(w, phase)
     return { { { ('  %s : %s  (%s)'):format(v, typ, note), NOTE } } }
   end
   if note then return { { { '  ' .. note, NOTE } } } end
+  if phase == 'values' and ran == false and w.value == nil then -- the run finished and nothing ran: settled
+    return { { { '  : ' .. (typ or '?'), NOTE } } }
+  end
   if phase == 'types' or w.value == nil then
     return { { { '  : ' .. (typ or '?') .. '  …', PENDING } } }
   end
   local lines = split(w.value)
   local first = lines[1]
-  if #first > MAX_BYTES then first = first:sub(1, MAX_BYTES) end
+  if #first > MAX_BYTES then first = cut(first, MAX_BYTES) .. '…' end
   local bytes = #first
   local vl = {}
   -- when every line fits in the virtual lines, show it whole; else leave one for the "more" line
@@ -89,6 +99,14 @@ local function dim_all(buf)
   local m = M.marks[buf]
   if not m or not vim.api.nvim_buf_is_valid(buf) then return end
   m.stale = true
+  if m.note_id then
+    local pos = vim.api.nvim_buf_get_extmark_by_id(buf, M.ns, m.note_id, { details = true })
+    if pos[1] then
+      vim.api.nvim_buf_set_extmark(buf, M.ns, pos[1], 0, {
+        id = m.note_id, virt_text = dimmed(pos[3].virt_text), virt_text_pos = 'eol', strict = false,
+      })
+    end
+  end
   for i, id in pairs(m.ids) do
     local pos = vim.api.nvim_buf_get_extmark_by_id(buf, M.ns, id, {})
     if pos[1] then
@@ -110,12 +128,12 @@ local function register(buf, m)
   })
 end
 
-local function place(buf, params, m, fresh)
+local function place(buf, params, m)
   local stale = params.version ~= vim.lsp.util.buf_versions[buf]
   local n = vim.api.nvim_buf_line_count(buf)
   m.watches, m.specs = params.watches or {}, {}
   for i, w in ipairs(m.watches) do
-    local spec = spec_of(w, params.phase)
+    local spec = spec_of(w, params.phase, params.ran)
     m.specs[i] = spec
     local id = m.ids[i]
     local pos = id and vim.api.nvim_buf_get_extmark_by_id(buf, M.ns, id, {})
@@ -130,26 +148,27 @@ local function place(buf, params, m, fresh)
   m.stale = stale
 end
 
+-- reset clears buf's marks and starts a fresh state for params' version.
+local function reset(buf, params, m)
+  vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
+  m = { version = params.version, ids = {}, watches = {}, specs = {}, autocmd = m and m.autocmd }
+  M.marks[buf] = m
+  register(buf, m)
+  return m
+end
+
 function M.render(buf, params)
   if not vim.api.nvim_buf_is_valid(buf) then return end
   local current = vim.lsp.util.buf_versions[buf]
   local m = M.marks[buf]
   if params.phase == 'types' then
     if params.version ~= current then return end
-    vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
-    m = { version = params.version, ids = {}, watches = {}, specs = {}, autocmd = m and m.autocmd }
-    M.marks[buf] = m
-    register(buf, m)
-    place(buf, params, m)
+    place(buf, params, reset(buf, params, m))
   elseif params.phase == 'values' then
     if m and m.version == params.version then
       place(buf, params, m)
     elseif params.version == current then
-      vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
-      m = { version = params.version, ids = {}, watches = {}, specs = {}, autocmd = m and m.autocmd }
-      M.marks[buf] = m
-      register(buf, m)
-      place(buf, params, m)
+      place(buf, params, reset(buf, params, m))
     end
   end
 end
@@ -228,14 +247,14 @@ end
 
 -- header_module is the module named by the file's `in` header (its first line of code), or nil.
 local function header_module(buf)
-  for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, 20, false)) do
-    if l:match('%S') and not l:match('^%s*%-%-') then return l:match('^in%s+([%w%.]+)') end
+  for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+    if l:match('%S') and not l:match('^%s*%-%-') then return l:match('^in%s+([%w%.]+)%s*$') end
   end
 end
 
 -- append adds lines as a watch at the end of <root>/scratch.alder and saves it (which runs it).
--- module is the sending buffer's module, or nil.
-function M.append(root, lines, module)
+-- module is the sending buffer's module, or nil. raw means lines already hold `> ` watches.
+function M.append(root, lines, module, raw)
   local path = ensure(root)
   local buf = vim.fn.bufadd(path)
   vim.fn.bufload(buf)
@@ -248,11 +267,17 @@ function M.append(root, lines, module)
     end
   end
   local out = {}
-  for _, l in ipairs(lines) do out[#out + 1] = l:sub((indent or 0) + 1) end
+  for _, l in ipairs(lines) do out[#out + 1] = raw and l or l:sub((indent or 0) + 1) end
+  while raw and #out > 0 and not out[1]:match('%S') do table.remove(out, 1) end
   while #out > 0 and not out[#out]:match('%S') do out[#out] = nil end
   if #out == 0 then return end
-  local add = { '', '> ' .. out[1] }
-  for i = 2, #out do add[#add + 1] = out[i] == '' and '' or ('    ' .. out[i]) end
+  local add = { '' }
+  if raw then -- lines that already hold watches go in as they are
+    for _, l in ipairs(out) do add[#add + 1] = l end
+  else
+    add[2] = '> ' .. out[1]
+    for i = 2, #out do add[#add + 1] = out[i] == '' and '' or ('    ' .. out[i]) end
+  end
   local n = vim.api.nvim_buf_line_count(buf)
   -- a file that already ends in a blank line needs no separator of ours
   if n > 0 and vim.api.nvim_buf_get_lines(buf, n - 1, n, false)[1] == '' then table.remove(add, 1) end
@@ -282,11 +307,13 @@ function M.send_current(mode)
     lines = { vim.api.nvim_get_current_line() }
   end
   local cur = vim.api.nvim_get_current_buf()
-  -- in a scratch file the line is already a watch: its `> ` stands for the 4-column indent of
-  -- its continuation lines, so append's dedent drops it with them and adds no second `>`
-  if M.is_scratch(cur) and lines[1] then lines[1] = lines[1]:gsub('^> ', '    ', 1) end
+  -- in a scratch file, lines holding watches go in as they are, with no second `>`
+  local raw = false
+  if M.is_scratch(cur) then
+    for _, l in ipairs(lines) do if l:match('^>') then raw = true end end
+  end
   local module = not M.is_scratch(cur) and vim.bo[cur].filetype == 'alder' and require('alder.buf').module_name(cur) or nil
-  M.append(r, lines, module)
+  M.append(r, lines, module, raw)
 end
 
 return M

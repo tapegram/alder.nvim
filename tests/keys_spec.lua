@@ -271,7 +271,7 @@ test('keys: legacy repl key maps to scratch and warns once', function()
   local config = require('alder.config')
   local saved = config.options
   local msgs, restore = H.capture_notify()
-  config.warned_repl = nil
+  config.reset_warned()
   config.set({ keys = { repl = '<leader>aX' } })
   config.set({ keys = { repl = '<leader>aX' } })
   local opts = config.options

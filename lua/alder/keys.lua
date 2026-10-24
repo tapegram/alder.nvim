@@ -66,7 +66,9 @@ end
 -- detach removes the maps (b:undo_ftplugin).
 function M.detach(buf)
   for name, lhs in pairs(mapped(false)) do
+    if name == 'scratch_value' and not require('alder.scratch').is_scratch(buf) then goto continue end
     for _, mode in ipairs(M.MODES[name] or { 'n' }) do pcall(vim.keymap.del, mode, lhs, { buffer = buf }) end
+    ::continue::
   end
 end
 

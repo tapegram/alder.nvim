@@ -13,6 +13,7 @@ M.defaults = {
 M.options = vim.deepcopy(M.defaults)
 
 local warned_repl = false
+function M.reset_warned() warned_repl = false end
 
 function M.set(opts)
   opts = vim.deepcopy(opts or {})

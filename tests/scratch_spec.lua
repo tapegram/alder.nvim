@@ -2,6 +2,14 @@
 local H = require('helpers')
 local S = require('alder.scratch')
 
+-- stop_lsp stops the alder clients gracefully (exit 0, so on_exit stays quiet) and waits for them,
+-- so no client outlives its tmpdir: that would print an initialize "lstat ... no such file" error.
+local function stop_lsp()
+  for _, c in ipairs(vim.lsp.get_clients({ name = 'alder' })) do c:stop() end
+  vim.wait(3000, function() return #vim.lsp.get_clients({ name = 'alder' }) == 0 end, 20)
+  vim.wait(50)
+end
+
 local function mkbuf(lines, version)
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -122,7 +130,7 @@ test('scratch: end to end', function()
   end)
   local got = {}
   for _, m in ipairs(marks(buf)) do got[#got + 1] = m[2] .. ':' .. eol(m) end
-  for _, c in ipairs(vim.lsp.get_clients({ name = 'alder' })) do c:stop(true) end
+  stop_lsp()
   vim.cmd('silent! %bwipeout!')
   vim.fn.delete(base, 'rf')
   assert(ok, 'no value: ' .. table.concat(got, '|'))
@@ -141,6 +149,7 @@ local function scratch_app()
 end
 
 local function cleanup(app)
+  stop_lsp()
   vim.cmd('silent! %bwipeout!')
   vim.fn.delete(app, 'rf')
 end
@@ -256,8 +265,84 @@ test('scratch: append runs end to end (save triggers the value)', function()
   end)
   local got = {}
   for _, m in ipairs(buf > 0 and marks(buf) or {}) do got[#got + 1] = m[2] .. ':' .. eol(m) end
-  for _, c in ipairs(vim.lsp.get_clients({ name = 'alder' })) do c:stop(true) end
+  stop_lsp()
   vim.cmd('silent! %bwipeout!')
   vim.fn.delete(base, 'rf')
   assert(ok, 'no value: ' .. table.concat(got, '|'))
+end)
+
+test('scratch: a cut value ends on a character boundary and says so', function()
+  local buf = mkbuf({ '> s' })
+  local v = string.rep('é', 1100) -- 2200 bytes, every char two bytes
+  S.render(buf, params('types', 1, { W(1, { type = 'String' }) }))
+  S.render(buf, params('values', 1, { W(1, { type = 'String', value = v }) }))
+  local head = marks(buf)[1][4].virt_text[1][1]
+  assert(vim.fn.strchars(head) > 0 and head:find('…', 1, true), head)
+  local body = head:match('^  ⇒ (.*)… : String$')
+  assert(body and #body <= 2048 and body == string.rep('é', #body / 2), 'cut inside a character or no marker: ' .. head:sub(-20))
+  assert(vim.fn.json_encode({ head }), 'not valid utf-8')
+end)
+
+test('scratch: an edit dims the line-1 note too', function()
+  local buf = mkbuf({ '> 1 + 1' })
+  S.render(buf, params('types', 1, { W(1, { type = 'Int' }) }))
+  S.render(buf, params('values', 1, { W(1, { type = 'Int', value = '2' }) }, { warning = 'unwired' }))
+  local function note()
+    for _, m in ipairs(marks(buf)) do if eol(m):find('unwired', 1, true) then return m end end
+  end
+  assert(note()[4].virt_text[1][2] == 'AlderScratchNote')
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { '> 1 + 2' })
+  vim.api.nvim_exec_autocmds('TextChanged', { buffer = buf })
+  assert(note()[4].virt_text[1][2] == 'AlderScratchPending', note()[4].virt_text[1][2])
+end)
+
+test('scratch: a finished run that ran nothing settles the pending marks and shows the note', function()
+  local buf = mkbuf({ '> 1 + 1' })
+  S.render(buf, params('types', 1, { W(1, { type = 'Int' }) }))
+  assert(eol(marks(buf)[1]) == '  : Int  …')
+  S.render(buf, params('values', 1, { W(1, { type = 'Int' }) }, { ran = false, note = 'the app does not check' }))
+  local all = {}
+  for _, m in ipairs(marks(buf)) do all[#all + 1] = eol(m) end
+  local text = table.concat(all, '|')
+  assert(not text:find('…', 1, true) and text:find('  : Int', 1, true) and text:find('the app does not check', 1, true), text)
+  for _, m in ipairs(marks(buf)) do assert(m[4].virt_text[1][2] == 'AlderScratchNote', eol(m)) end
+end)
+
+test('scratch: the in header is found past 20 lines of comments and must be the whole line', function()
+  local app = scratch_app()
+  local lines = {}
+  for i = 1, 30 do lines[i] = '-- c' .. i end
+  lines[#lines + 1] = 'in Todo'
+  lines[#lines + 1] = ''
+  lines[#lines + 1] = '> 1'
+  H.write(app .. '/scratch.alder', table.concat(lines, '\n') .. '\n')
+  local msgs, restore = H.capture_notify()
+  local ok, err = pcall(function()
+    S.reset_warned()
+    S.append(app, { 'x' }, 'Todo')
+    assert(#msgs == 0, vim.inspect(msgs))
+    H.write(app .. '/scratch.alder', 'in Todo.Extra\n\n> 1\n')
+    vim.cmd('silent! %bwipeout!')
+    S.reset_warned()
+    S.append(app, { 'x' }, 'Todo')
+    assert(#msgs == 1, vim.inspect(msgs))
+  end)
+  restore()
+  cleanup(app)
+  assert(ok, err)
+end)
+
+test('scratch: sending a selection of two watches from scratch.alder appends them as they are', function()
+  local app = scratch_app()
+  local ok, err = pcall(function()
+    H.write(app .. '/scratch.alder', '> a\n> b\n    |> f\n')
+    vim.cmd.edit(app .. '/scratch.alder')
+    vim.fn.setpos("'<", { 0, 1, 1, 0 })
+    vim.fn.setpos("'>", { 0, 3, 1, 0 })
+    S.send_current('x')
+    local text = H.read(app .. '/scratch.alder')
+    assert(text == '> a\n> b\n    |> f\n\n> a\n> b\n    |> f\n', vim.inspect(text))
+  end)
+  cleanup(app)
+  assert(ok, err)
 end)
