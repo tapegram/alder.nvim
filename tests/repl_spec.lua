@@ -208,3 +208,17 @@ test('repl: with no alder binary, module_for_buf does not warn about --in', func
   assert(module == 'App', vim.inspect(module))
   assert(#msgs == 0, vim.inspect(msgs))
 end)
+
+test('repl: AlderRepl warns deprecated', function()
+  local called = false
+  local orig = R.for_current
+  R.for_current = function() called = true end
+  local msgs, restore = H.capture_notify()
+  local ok, err = pcall(vim.cmd, 'AlderRepl')
+  restore()
+  R.for_current = orig
+  assert(ok, err)
+  assert(called)
+  assert(#msgs == 1 and msgs[1].level == vim.log.levels.WARN, vim.inspect(msgs))
+  assert(msgs[1].msg == 'alder repl is deprecated: use a scratch file (alder scratch --watch, or save scratch.alder in the editor); it will be removed in the next release', msgs[1].msg)
+end)

@@ -8,14 +8,20 @@ M.actions = {
   test = function() require('alder.test').for_current() end,
   test_at = function() require('alder.test').at_cursor() end,
   mutate = function() require('alder.test').mutate_for_current() end,
-  repl = function() require('alder.repl').for_current() end,
+  scratch = function()
+    local r = require('alder.project').root()
+    if r then require('alder.scratch').open(r) end
+  end,
+  scratch_value = function()
+    if require('alder.scratch').is_scratch(0) then require('alder.scratch').open_value() end
+  end,
   routes = function() require('alder.routes').pick() end,
-  send = function(mode) require('alder.repl').send_current(mode or 'n') end,
+  send = function(mode) require('alder.scratch').send_current(mode or 'n') end,
 }
 
 -- PROJECT are the actions that need an Alder project but no .alder buffer: they are global maps
 -- (attach_global) that say so outside a project. The rest are buffer-local maps in .alder files.
-M.PROJECT = { generate = true, run = true, test = true, repl = true, routes = true }
+M.PROJECT = { generate = true, run = true, test = true, scratch = true, routes = true }
 
 -- MODES are the modes an action is mapped in (default: normal only); in 'x' the action gets 'x'.
 M.MODES = { send = { 'n', 'x' } }
@@ -28,8 +34,9 @@ local DESC = {
   test = 'alder: run the tests',
   test_at = 'alder: run the test under the cursor',
   mutate = 'alder: mutation testing (survivors to quickfix)',
-  repl = 'alder: the REPL in this module',
-  send = 'alder: send to the REPL',
+  scratch = 'alder: open scratch.alder',
+  scratch_value = 'alder: open the scratch value at the cursor',
+  send = 'alder: send to scratch.alder',
   routes = 'alder: the routes of the app (jump to a page or msg)',
 }
 
@@ -44,11 +51,13 @@ end
 -- attach maps each configured key buffer-locally and names the which-key group.
 function M.attach(buf)
   for name, lhs in pairs(mapped(false)) do
+    if name == 'scratch_value' and not require('alder.scratch').is_scratch(buf) then goto continue end
     for _, mode in ipairs(M.MODES[name] or { 'n' }) do
       local rhs = M.actions[name]
       if mode == 'x' then rhs = function() M.actions[name]('x') end end
       vim.keymap.set(mode, lhs, rhs, { buffer = buf, desc = DESC[name] })
     end
+    ::continue::
   end
   local ok, wk = pcall(require, 'which-key')
   if ok then pcall(wk.add, { { '<leader>a', group = 'alder', buffer = buf } }) end

@@ -3,6 +3,8 @@ local root = require('alder.root')
 
 local M = {}
 
+M.DEPRECATED = 'alder repl is deprecated: use a scratch file (alder scratch --watch, or save scratch.alder in the editor); it will be removed in the next release'
+
 M.sessions = {} -- real app root → { job, buf, ready, queue }
 
 -- argv is the command line: `alder repl --in <module>` inside a module, `alder repl` outside.

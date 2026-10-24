@@ -81,13 +81,32 @@ test('health: the current alder has repl --in, and says so', function()
   assert(warns_matching(reports, 'repl %-%-in') == 0, vim.inspect(reports))
 end)
 
-test('health: an alder whose repl lacks --in is a warning, judged from the tree it just ran', function()
+test('health: an alder whose repl lacks --in is no longer a warning (the REPL is deprecated)', function()
   -- the cached tree (the real alder's) has --in; the check must use the fake one's help --json
   assert(require('alder.commands').has_flag({ 'repl' }, '--in'))
   local tree = '{"commands":[{"name":"repl","flags":[{"name":"--module"}]}]}'
   with_cmd('case "$1" in version) echo "alder old";; *) echo \'' .. tree .. '\';; esac', function()
     local reports = capture()
-    assert(warns_matching(reports, 'repl %-%-in') == 1, vim.inspect(reports))
+    assert(warns_matching(reports, 'repl %-%-in') == 0, vim.inspect(reports))
     assert(errors_matching(reports, 'help %-%-json') == 0, vim.inspect(reports))
   end)
+end)
+
+test('health: a running alder client with alderScratch is ok, without it a warning', function()
+  local function client(caps) return { name = 'alder', root_dir = '/x', server_capabilities = caps, is_stopped = function() return false end } end
+  local orig = vim.lsp.get_clients
+  local function run(c)
+    vim.lsp.get_clients = function() return { c } end
+    local ok, reports = pcall(capture)
+    vim.lsp.get_clients = orig
+    assert(ok, reports)
+    return reports
+  end
+  local ok = run(client({ experimental = { alderScratch = true } }))
+  assert(warns_matching(ok, 'LspRestart') == 0)
+  local found = false
+  for _, r in ipairs(ok) do if r[1] == 'ok' and r[2]:find('scratch', 1, true) then found = true end end
+  assert(found, vim.inspect(ok))
+  local bad = run(client({}))
+  assert(warns_matching(bad, 'LspRestart') == 1, vim.inspect(bad))
 end)

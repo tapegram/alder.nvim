@@ -64,7 +64,7 @@ require('alder').setup({
   check_on_save = true, -- run alder check after writing an .alder file
   preview = true,       -- the `:Alder` CLI path shows the diff first; <CR> applies, q discards (not the modal)
   lsp = true,           -- start `alder lsp` for .alder buffers; false keeps CLI mode
-  keys = {              -- each can be false; generate/run/test/repl/routes are global (see Keys)
+  keys = {              -- each can be false; generate/run/test/scratch/routes are global (see Keys)
     generate = '<leader>ag',
     diagnostics = '<leader>ac',
     explain = '<leader>ae',
@@ -72,9 +72,10 @@ require('alder').setup({
     test = '<leader>at',
     test_at = '<leader>aT',
     mutate = '<leader>am',
-    repl = '<leader>ax',
+    scratch = '<leader>ax',
     routes = '<leader>au',
     send = '<leader>as',
+    scratch_value = '<leader>ao',
   },
   revision = nil,       -- install the grammar from this tag of tapegram/alder, e.g. 'v0.2.0'
   path = nil,           -- install the grammar from a local alder checkout (see below)
@@ -100,8 +101,19 @@ run so the grammar matches your compiler.
 | `:AlderTest [args]` | `alder test`: failures land in the quickfix list at their `test` line, compile errors as diagnostics |
 | `:AlderMutate [args]` | `alder test --mutate` in the background: the survivors land in the quickfix list at the mutated expression, `before → after` |
 | `:AlderRoutes` | the app's routes in a fuzzy picker (filter on the path); select one to jump to its declaration |
-| `:AlderRepl` | `alder repl --in <this module>` in a split |
+| `:AlderScratch` | open `scratch.alder` at the app root (created from a template); each `> expr` line shows its value |
+| `:AlderRepl` | deprecated: `alder repl --in <this module>` in a split; use `:AlderScratch` |
 | `:Alder <args…>` | any `alder` command, with completion; it writes to disk through the CLI |
+
+## Scratch files
+
+`scratch.alder` at the app root is a place to try expressions. Each `> expr` line is evaluated when
+you save, and its type and value appear after the line as virtual text (long values are cut; put the
+cursor on one and press `<leader>ao` for the whole value). Everything else in the file is ordinary
+Alder: define helpers there and watch them. Put `in Module` on the first line to use a module's names
+unqualified. `<leader>as` appends the current line or selection as a new watch and saves. This needs
+the `alder lsp` that advertises scratch support (`:checkhealth alder`; `:LspRestart` after updating).
+The old REPL (`:AlderRepl`) is deprecated and will be removed in the next release.
 
 ## Keys
 
@@ -110,10 +122,9 @@ buffer's file or the cwd is inside an Alder project (an `app/` directory above i
 they say `alder: not in an Alder project`. The **buffer-only** maps exist only in `.alder` buffers.
 
 Project-level (global): `<leader>ag` (generator modal; from a non-`.alder` buffer it opens the app's
-`app/App.alder` first), `<leader>ar` (run), `<leader>at` (test), `<leader>ax` (REPL, in app scope
-outside an `.alder` buffer), `<leader>au` (routes).
+`app/App.alder` first), `<leader>ar` (run), `<leader>at` (test), `<leader>ax` (scratch file), `<leader>au` (routes).
 
-Buffer-only (`.alder` buffers): `<leader>ac`, `<leader>ae`, `<leader>aT`, `<leader>am`, `<leader>as`.
+Buffer-only (`.alder` buffers): `<leader>ac`, `<leader>ae`, `<leader>aT`, `<leader>am`, `<leader>as`, and `<leader>ao` (in `scratch.alder` only).
 
 All of them:
 
@@ -126,11 +137,12 @@ All of them:
 | `<leader>at` | `alder test`; failures land in the quickfix list at their `test` line, compile errors as diagnostics |
 | `<leader>aT` | run the test under the cursor (the module's tests when none is above it) |
 | `<leader>am` | `alder test --mutate` in the background; the survivors land in the quickfix list at the mutated expression, `before → after` |
-| `<leader>ax` | open `alder repl --in <this module>` in a split |
+| `<leader>ax` | open `scratch.alder` at the app root |
 | `<leader>au` | the routes picker (`:AlderRoutes`): `GET /sites/:id  Sites.Clarity.Index.page` (`POST` for a msg), fuzzy-filtered on the path, `<CR>` jumps to the declaration; asks the language server (`alder/routes`), else runs `alder routes --json` |
-| `<leader>as` | send the current line (normal mode) or the selection (visual mode) to the REPL |
+| `<leader>as` | append the current line (normal mode) or the selection (visual mode) to `scratch.alder` as a watch and save it |
+| `<leader>ao` | in `scratch.alder`: open the full value under the cursor in a float |
 
-`repl --in` needs an `alder` built from this change or later; `:checkhealth alder` says whether yours has it.
+`keys.repl` is the old name of `keys.scratch`; it still works and warns once. `:checkhealth alder` says whether your language server supports scratch files.
 
 Each can be set to `false` in `opts.keys`, project-level ones too. With which-key, `<leader>a` is the group "alder".
 

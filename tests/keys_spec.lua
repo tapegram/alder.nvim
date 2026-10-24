@@ -78,7 +78,7 @@ test('keys: false disables one key', function()
     assert(not mapped('<leader>am'))
     assert(gmapped('<leader>at'))
   end)
-  with_opts({ keys = { repl = false } }, function()
+  with_opts({ keys = { scratch = false } }, function()
     blog_buf('app/Post.alder')
     assert(not gmapped('<leader>ax'))
     assert(mapped('<leader>as'))
@@ -238,4 +238,48 @@ end)
 test('commands: AlderNew and AlderFill are gone, AlderDiagnostics exists', function()
   assert(vim.fn.exists(':AlderNew') == 0 and vim.fn.exists(':AlderFill') == 0)
   assert(vim.fn.exists(':AlderDiagnostics') == 2)
+end)
+
+test('keys: <leader>ax opens scratch.alder', function()
+  vim.g.mapleader = ' '
+  local dst = H.tmpdir() .. '/blog'
+  H.copy_tree(H.alder_repo() .. '/examples/blog', dst)
+  local old = vim.fn.getcwd()
+  vim.cmd.cd(dst)
+  local ok, err = pcall(function()
+    vim.cmd.enew()
+    assert(gmapped('<leader>ax'))
+    vim.api.nvim_feedkeys(vim.keycode('<leader>ax'), 'x', false)
+    assert(vim.api.nvim_buf_get_name(0) == dst .. '/scratch.alder', vim.api.nvim_buf_get_name(0))
+    assert(H.read(dst .. '/scratch.alder') == require('alder.scratch').TEMPLATE)
+    assert(H.wait(5000, function() return vim.b.alder_lsp end), 'not attached')
+    assert(mapped('<leader>ao'), '<leader>ao not mapped in the scratch buffer')
+  end)
+  vim.cmd.cd(old)
+  vim.cmd('silent! %bwipeout!')
+  vim.fn.delete(dst, 'rf')
+  assert(ok, err)
+end)
+
+test('keys: <leader>ao is not mapped outside a scratch file', function()
+  vim.g.mapleader = ' '
+  blog_buf('app/Post.alder')
+  assert(not mapped('<leader>ao'))
+end)
+
+test('keys: legacy repl key maps to scratch and warns once', function()
+  local config = require('alder.config')
+  local saved = config.options
+  local msgs, restore = H.capture_notify()
+  config.warned_repl = nil
+  config.set({ keys = { repl = '<leader>aX' } })
+  config.set({ keys = { repl = '<leader>aX' } })
+  local opts = config.options
+  restore()
+  config.options = saved
+  assert(opts.keys.scratch == '<leader>aX', vim.inspect(opts.keys))
+  assert(opts.keys.repl == nil)
+  local n = 0
+  for _, m in ipairs(msgs) do if m.msg:find('keys.repl', 1, true) then n = n + 1 end end
+  assert(n == 1, vim.inspect(msgs))
 end)

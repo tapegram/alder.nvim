@@ -22,9 +22,9 @@ function M.check()
     if tree then
       h.ok('`alder help --json` works (completion and :AlderGenerate)')
       if commands.tree_has_flag(tree, { 'repl' }, '--in') then
-        h.ok('`alder repl --in` (the REPL speaks as the buffer\'s module)')
+        h.info('`alder repl --in` is available (the REPL is deprecated: use scratch files)')
       else
-        h.warn('this alder has no `repl --in`: <leader>ax opens the REPL in app scope; build a newer one')
+        h.info('this alder has no `repl --in` (the REPL is deprecated: use scratch files)')
       end
     else
       h.error('`alder help --json` failed: this alder predates editor support; build a newer one')
@@ -41,6 +41,16 @@ function M.check()
       if s.running then h.ok(('alder lsp running for `%s`'):format(s.root)) end
     end
     if #status == 0 then h.info('no alder lsp running (open an .alder file inside an app)') end
+    for _, c in ipairs(vim.lsp.get_clients({ name = 'alder' })) do
+      if not c:is_stopped() then
+        local ex = c.server_capabilities and c.server_capabilities.experimental
+        if ex and ex.alderScratch then
+          h.ok(('alder lsp for `%s` supports scratch files (alder/scratch)'):format(c.root_dir))
+        else
+          h.warn(('alder lsp for `%s` has no scratch support: update alder, or :LspRestart'):format(c.root_dir))
+        end
+      end
+    end
   end
 
   if require('alder.ui').has_nui() then

@@ -20,7 +20,7 @@ for name, link in pairs({
   vim.api.nvim_set_hl(0, name, { link = link, default = true })
 end
 
--- the project-level maps (generate, run, test, REPL, routes) work in any buffer of a project; setup() redoes them
+-- the project-level maps (generate, run, test, scratch, routes) work in any buffer of a project; setup() redoes them
 require('alder.keys').attach_global()
 
 vim.api.nvim_create_autocmd('FileType', {
@@ -64,8 +64,14 @@ vim.api.nvim_create_user_command('AlderMutate', function(o)
 end, { nargs = '*', desc = 'alder test --mutate [args] in the background: survivors in the quickfix list' })
 
 vim.api.nvim_create_user_command('AlderRepl', function()
+  vim.notify(require('alder.repl').DEPRECATED, vim.log.levels.WARN)
   require('alder.repl').for_current()
-end, { desc = 'alder repl --in <this module> in a split (focuses a running one)' })
+end, { desc = 'DEPRECATED: alder repl --in <this module> in a split; use :AlderScratch' })
+
+vim.api.nvim_create_user_command('AlderScratch', function()
+  local r = require('alder.project').require_root()
+  if r then require('alder.scratch').open(r) end
+end, { desc = 'open scratch.alder at the app root: each `> expr` line shows its value' })
 
 vim.api.nvim_create_user_command('AlderRoutes', function()
   require('alder.routes').pick()
