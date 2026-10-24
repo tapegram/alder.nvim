@@ -228,3 +228,19 @@ test('scratch: the handler ignores unknown uris and marks go on wipeout', functi
   vim.api.nvim_buf_delete(buf, { force = true })
   assert(S.marks[buf] == nil)
 end)
+
+test('scratch: append runs end to end (save triggers the value)', function()
+  local root = H.new_app()
+  local base = vim.fs.dirname(root)
+  S.append(root, { '2 + 3' }, nil)
+  local buf = vim.fn.bufnr(root .. '/scratch.alder')
+  local ok = buf > 0 and H.wait(180000, function()
+    for _, m in ipairs(marks(buf)) do if eol(m):find('⇒ 5 : Int', 1, true) then return true end end
+  end)
+  local got = {}
+  for _, m in ipairs(buf > 0 and marks(buf) or {}) do got[#got + 1] = m[2] .. ':' .. eol(m) end
+  for _, c in ipairs(vim.lsp.get_clients({ name = 'alder' })) do c:stop(true) end
+  vim.cmd('silent! %bwipeout!')
+  vim.fn.delete(base, 'rf')
+  assert(ok, 'no value: ' .. table.concat(got, '|'))
+end)

@@ -257,8 +257,8 @@ function M.append(root, lines, module)
   -- a file that already ends in a blank line needs no separator of ours
   if n > 0 and vim.api.nvim_buf_get_lines(buf, n - 1, n, false)[1] == '' then table.remove(add, 1) end
   vim.api.nvim_buf_set_lines(buf, n, n, false, add)
-  vim.api.nvim_buf_call(buf, function() vim.cmd('silent noautocmd write') end)
   if vim.bo[buf].filetype ~= 'alder' then vim.bo[buf].filetype = 'alder' end
+  vim.api.nvim_buf_call(buf, function() vim.cmd('silent write') end)
   if vim.fn.bufwinid(buf) == -1 then
     local cur = vim.api.nvim_get_current_win()
     vim.cmd('botright sbuffer ' .. buf)
