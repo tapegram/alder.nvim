@@ -124,7 +124,7 @@ test('scratch: end to end', function()
   vim.cmd.edit(root .. '/scratch.alder')
   local buf = vim.api.nvim_get_current_buf()
   assert(H.wait(10000, function() return vim.b[buf].alder_lsp end), 'not attached')
-  vim.cmd.write()
+  vim.cmd('silent write')
   local ok = H.wait(180000, function()
     for _, m in ipairs(marks(buf)) do if eol(m):find('⇒ 2 : Int', 1, true) and m[2] == 4 then return true end end
   end)
