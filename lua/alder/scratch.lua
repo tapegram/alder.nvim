@@ -282,6 +282,9 @@ function M.send_current(mode)
     lines = { vim.api.nvim_get_current_line() }
   end
   local cur = vim.api.nvim_get_current_buf()
+  -- in a scratch file the line is already a watch: its `> ` stands for the 4-column indent of
+  -- its continuation lines, so append's dedent drops it with them and adds no second `>`
+  if M.is_scratch(cur) and lines[1] then lines[1] = lines[1]:gsub('^> ', '    ', 1) end
   local module = not M.is_scratch(cur) and vim.bo[cur].filetype == 'alder' and require('alder.buf').module_name(cur) or nil
   M.append(r, lines, module)
 end
