@@ -21,6 +21,7 @@ function M.start(buf)
     name = 'alder',
     cmd = { config.options.cmd, 'lsp' },
     root_dir = r,
+    handlers = { ['alder/scratch'] = require('alder.scratch').handler },
     on_attach = function(_, b) vim.b[b].alder_lsp = true end,
     on_exit = function(code, signal)
       vim.schedule(function()

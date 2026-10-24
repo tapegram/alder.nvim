@@ -13,6 +13,13 @@ vim.api.nvim_create_autocmd('User', {
 
 require('alder.parser').register()
 
+for name, link in pairs({
+  AlderScratchValue = 'Comment', AlderScratchPending = 'NonText',
+  AlderScratchError = 'DiagnosticError', AlderScratchNote = 'DiagnosticInfo',
+}) do
+  vim.api.nvim_set_hl(0, name, { link = link, default = true })
+end
+
 -- the project-level maps (generate, run, test, REPL, routes) work in any buffer of a project; setup() redoes them
 require('alder.keys').attach_global()
 
