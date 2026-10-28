@@ -286,7 +286,7 @@ function M.append(root, lines, module, raw)
   end
   local out = {}
   for _, l in ipairs(lines) do out[#out + 1] = raw and l or l:sub((indent or 0) + 1) end
-  while raw and #out > 0 and not out[1]:match('%S') do table.remove(out, 1) end
+  while #out > 0 and not out[1]:match('%S') do table.remove(out, 1) end
   while #out > 0 and not out[#out]:match('%S') do out[#out] = nil end
   if #out == 0 then return end
   local add = { '' }

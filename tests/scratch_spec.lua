@@ -228,6 +228,7 @@ end
 
 test('scratch: a sent definition is not wrapped', function()
   append_tail({ 'f x = x + 1' }, '\nf x = x + 1\n')
+  append_tail({ '', 'f x = 1' }, '\nf x = 1\n')
 end)
 
 test('scratch: a sent signature and body keep their lines', function()
