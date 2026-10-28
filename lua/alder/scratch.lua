@@ -252,8 +252,28 @@ local function header_module(buf)
   end
 end
 
--- append adds lines as a watch at the end of <root>/scratch.alder and saves it (which runs it).
--- module is the sending buffer's module, or nil. raw means lines already hold `> ` watches.
+local DEFINITION_KEYWORDS = { 'type', 'alias', 'import', 'page', 'msg', 'form', 'table', 'capability', 'fake', 'session', 'login', 'test' }
+local EXPRESSION_KEYWORDS = { let = true, ['if'] = true, case = true }
+
+-- is_definition says whether a line starts a definition rather than an expression: it begins with a
+-- declaration keyword and the start of its head (`type Model`, `page "/x"`, `session {`),
+-- or is a signature (`name :`), or is a binding (`f x =`, not `==`/`<=`).
+function M.is_definition(line)
+  line = line:gsub('^%s+', '')
+  for _, kw in ipairs(DEFINITION_KEYWORDS) do
+    if line:match('^' .. kw .. '%s+[%u"{]') then return true end
+  end
+  if line:match("^[%a_][%w_']*%s*:") then return true end
+  local word = line:match("^[%l_][%w_']*")
+  if not word or EXPRESSION_KEYWORDS[word] then return false end
+  local eq = line:find('=', 1, true)
+  if not eq or line:sub(eq + 1, eq + 1) == '=' then return false end
+  return line:sub(1, eq - 1):match("^[%w_'%s(),{}:]*$") ~= nil
+end
+
+-- append adds lines at the end of <root>/scratch.alder and saves it (which runs it): a definition, or
+-- lines that already hold watches (raw), go in as written; an expression becomes a `> ` watch.
+-- Leading `--` comments go in as written either way. module is the sending buffer's module, or nil.
 function M.append(root, lines, module, raw)
   local path = ensure(root)
   local buf = vim.fn.bufadd(path)
@@ -268,15 +288,25 @@ function M.append(root, lines, module, raw)
   end
   local out = {}
   for _, l in ipairs(lines) do out[#out + 1] = raw and l or l:sub((indent or 0) + 1) end
-  while raw and #out > 0 and not out[1]:match('%S') do table.remove(out, 1) end
+  while #out > 0 and not out[1]:match('%S') do table.remove(out, 1) end
   while #out > 0 and not out[#out]:match('%S') do out[#out] = nil end
   if #out == 0 then return end
   local add = { '' }
   if raw then -- lines that already hold watches go in as they are
     for _, l in ipairs(out) do add[#add + 1] = l end
   else
-    add[2] = '> ' .. out[1]
-    for i = 2, #out do add[#add + 1] = out[i] == '' and '' or ('    ' .. out[i]) end
+    -- leading comments (and blanks among them) go in as written; the first other line is classified
+    local first = 1
+    while out[first] and (out[first]:match('^%-%-') or not out[first]:match('%S')) do
+      add[#add + 1] = out[first]
+      first = first + 1
+    end
+    if out[first] and M.is_definition(out[first]) then -- a definition goes in as written
+      for i = first, #out do add[#add + 1] = out[i] end
+    elseif out[first] then
+      add[#add + 1] = '> ' .. out[first]
+      for i = first + 1, #out do add[#add + 1] = out[i] == '' and '' or ('    ' .. out[i]) end
+    end
   end
   local n = vim.api.nvim_buf_line_count(buf)
   -- a file that already ends in a blank line needs no separator of ours

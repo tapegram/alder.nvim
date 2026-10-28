@@ -283,3 +283,18 @@ test('keys: legacy repl key maps to scratch and warns once', function()
   for _, m in ipairs(msgs) do if m.msg:find('keys.repl', 1, true) then n = n + 1 end end
   assert(n == 1, vim.inspect(msgs))
 end)
+
+test('keys: which-key group covers normal and visual mode', function()
+  vim.g.mapleader = ' '
+  local saved = package.loaded['which-key']
+  local recorded
+  package.loaded['which-key'] = { add = function(spec) recorded = spec end }
+  local ok, err = pcall(blog_buf, 'app/Post.alder')
+  package.loaded['which-key'] = saved
+  if not ok then error(err, 0) end
+  assert(recorded, 'which-key add was not called')
+  assert(recorded[1][1] == '<leader>a', vim.inspect(recorded))
+  assert(recorded[1].group == 'alder', vim.inspect(recorded))
+  assert(vim.tbl_contains(recorded[1].mode or {}, 'n'), vim.inspect(recorded))
+  assert(vim.tbl_contains(recorded[1].mode or {}, 'x'), vim.inspect(recorded))
+end)

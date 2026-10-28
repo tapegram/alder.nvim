@@ -78,7 +78,7 @@ test('apply: changed since planning', function()
 end)
 
 test('apply: a new page is an unsaved buffer; :w creates its directory', function()
-  local buf, root = blog_buf('app/Post.alder')
+  local buf, root = blog_buf('app/Table/Post.alder')
   local done = false
   local messages, restore = H.capture_notify()
   apply.run(buf, 'new page', { module = 'Tags.Index', path = '/tags' }, function() done = true end)
@@ -97,7 +97,7 @@ test('apply: a new page is an unsaved buffer; :w creates its directory', functio
 end)
 
 test('apply: a refusal is the server text and nothing changes', function()
-  local buf = blog_buf('app/Post.alder')
+  local buf = blog_buf('app/Table/Post.alder')
   local before = text(buf)
   local messages, restore = H.capture_notify()
   local ok, err = pcall(function()
@@ -170,7 +170,7 @@ test('apply: remove page re-checks after the confirm; an edit made while it was 
 end)
 
 test('apply: a nil plan result does nothing', function()
-  local buf = blog_buf('app/Post.alder')
+  local buf = blog_buf('app/Table/Post.alder')
   local lsp = require('alder.lsp')
   local orig = lsp.request
   local messages, restore = H.capture_notify()
