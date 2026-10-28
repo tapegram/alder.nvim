@@ -209,6 +209,9 @@ test('scratch: is_definition', function()
     { 'x == y', false }, { 'f x <= y', false }, { '{ a = 1 }', false }, { 'let x = 1 in x', false },
     { 'if a then b else c', false }, { 'foo', false }, { '1 + 1', false }, { '-- a comment', false },
     { 'typeOf x', false },
+    { 'msg == Save', false }, { 'session |> Session.user', false }, { 'session { user : Int }', true },
+    { 'login = …', true }, { 'page "/login" { }', true }, { "import\tHtml", true },
+    { 'x /= y', false }, { 'x != y', false }, { 'log "a = b"', false }, { 'g x =', true },
   }
   for _, c in ipairs(cases) do
     assert(S.is_definition(c[1]) == c[2], ('is_definition(%q) should be %s'):format(c[1], tostring(c[2])))
@@ -237,7 +240,10 @@ end)
 
 test('scratch: a sent expression is a watch', function()
   append_tail({ 'x == y' }, '\n> x == y\n')
-  append_tail({ '-- note', 'f x = 1' }, '\n> -- note\n    f x = 1\n')
+  append_tail({ '', 'x == y' }, '\n> x == y\n')
+  append_tail({ '-- note', 'f x = 1' }, '\n-- note\nf x = 1\n')
+  append_tail({ '-- note', 'x == y' }, '\n-- note\n> x == y\n')
+  append_tail({ '-- only', '-- comments' }, '\n-- only\n-- comments\n')
 end)
 
 test('scratch: append warns about the in header', function()
