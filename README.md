@@ -139,7 +139,7 @@ All of them:
 | `<leader>am` | `alder test --mutate` in the background; the survivors land in the quickfix list at the mutated expression, `before → after` |
 | `<leader>ax` | open `scratch.alder` at the app root |
 | `<leader>au` | the routes picker (`:AlderRoutes`): `GET /sites/:id  Sites.Clarity.Index.page` (`POST` for a msg), fuzzy-filtered on the path, `<CR>` jumps to the declaration; asks the language server (`alder/routes`), else runs `alder routes --json` |
-| `<leader>as` | append the current line (normal mode) or the selection (visual mode) to `scratch.alder` as a watch and save it |
+| `<leader>as` | send the current line (normal mode) or the selection (visual mode) to `scratch.alder` and save it: a definition (`f x = …`, `name : T`, `type …`) is added as written, an expression as a `> ` watch |
 | `<leader>ao` | in `scratch.alder`: open the full value under the cursor in a float |
 
 `keys.repl` is the old name of `keys.scratch`; it still works and warns once. `:checkhealth alder` says whether your language server supports scratch files.

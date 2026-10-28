@@ -201,6 +201,44 @@ test('scratch: send inside scratch.alder adds no second >', function()
   assert(ok, err)
 end)
 
+test('scratch: is_definition', function()
+  local cases = {
+    { 'f x = x + 1', true }, { 'pair (a, b) = a', true }, { 'name : Int', true }, { 'x = 1', true },
+    { 'type Shape = Circle | Square', true }, { 'alias P = { x : Int }', true }, { 'import Html', true },
+    { 'test "adds" = 1 + 1 == 2', true }, { 'page Index = …', true },
+    { 'x == y', false }, { 'f x <= y', false }, { '{ a = 1 }', false }, { 'let x = 1 in x', false },
+    { 'if a then b else c', false }, { 'foo', false }, { '1 + 1', false }, { '-- a comment', false },
+    { 'typeOf x', false },
+  }
+  for _, c in ipairs(cases) do
+    assert(S.is_definition(c[1]) == c[2], ('is_definition(%q) should be %s'):format(c[1], tostring(c[2])))
+  end
+end)
+
+local function append_tail(lines, expected)
+  local app = scratch_app()
+  local ok, err = pcall(function()
+    S.append(app, lines, nil)
+    local text = H.read(app .. '/scratch.alder')
+    assert(vim.endswith(text, expected), vim.inspect(text))
+  end)
+  cleanup(app)
+  assert(ok, err)
+end
+
+test('scratch: a sent definition is not wrapped', function()
+  append_tail({ 'f x = x + 1' }, '\nf x = x + 1\n')
+end)
+
+test('scratch: a sent signature and body keep their lines', function()
+  append_tail({ 'g : Int -> Int', 'g x =', '    x * 2' }, '\ng : Int -> Int\ng x =\n    x * 2\n')
+end)
+
+test('scratch: a sent expression is a watch', function()
+  append_tail({ 'x == y' }, '\n> x == y\n')
+  append_tail({ '-- note', 'f x = 1' }, '\n> -- note\n    f x = 1\n')
+end)
+
 test('scratch: append warns about the in header', function()
   local app = scratch_app()
   local msgs, restore = H.capture_notify()

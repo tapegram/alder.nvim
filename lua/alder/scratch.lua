@@ -252,6 +252,24 @@ local function header_module(buf)
   end
 end
 
+local DEFINITION_KEYWORDS = { 'type', 'alias', 'import', 'page', 'msg', 'form', 'table', 'capability', 'fake', 'session', 'login', 'test' }
+local EXPRESSION_KEYWORDS = { let = true, ['if'] = true, case = true }
+
+-- is_definition says whether a line starts a definition rather than an expression: it begins with a
+-- declaration keyword and a space, or is a signature (`name :`), or is a binding (`f x =`, not `==`/`<=`).
+function M.is_definition(line)
+  line = line:gsub('^%s+', '')
+  for _, kw in ipairs(DEFINITION_KEYWORDS) do
+    if vim.startswith(line, kw .. ' ') then return true end
+  end
+  if line:match("^[%a_][%w_']*%s*:") then return true end
+  local word = line:match("^[%l_][%w_']*")
+  if not word or EXPRESSION_KEYWORDS[word] then return false end
+  local eq = line:find('=', 1, true)
+  if not eq or line:sub(eq + 1, eq + 1) == '=' then return false end
+  return line:sub(1, eq - 1):match("^[%w_'%s(),{}:]*$") ~= nil
+end
+
 -- append adds lines as a watch at the end of <root>/scratch.alder and saves it (which runs it).
 -- module is the sending buffer's module, or nil. raw means lines already hold `> ` watches.
 function M.append(root, lines, module, raw)
@@ -273,6 +291,8 @@ function M.append(root, lines, module, raw)
   if #out == 0 then return end
   local add = { '' }
   if raw then -- lines that already hold watches go in as they are
+    for _, l in ipairs(out) do add[#add + 1] = l end
+  elseif M.is_definition(out[1]) then -- a definition goes in as written
     for _, l in ipairs(out) do add[#add + 1] = l end
   else
     add[2] = '> ' .. out[1]
