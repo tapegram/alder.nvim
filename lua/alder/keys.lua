@@ -60,7 +60,7 @@ function M.attach(buf)
     ::continue::
   end
   local ok, wk = pcall(require, 'which-key')
-  if ok then pcall(wk.add, { { '<leader>a', group = 'alder', buffer = buf } }) end
+  if ok then pcall(wk.add, { { '<leader>a', group = 'alder', buffer = buf, mode = { 'n', 'x' } } }) end
 end
 
 -- detach removes the maps (b:undo_ftplugin).
