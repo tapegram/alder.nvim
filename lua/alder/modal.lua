@@ -308,6 +308,11 @@ render_form = function()
     end
   end
   local f = s.focus and s.fields[s.focus]
+  -- the focused field's example, right under it (before its options or suggestions)
+  local example = form.example_line(f)
+  if example then
+    vim.api.nvim_buf_set_extmark(buf, ns, s.focus - 1, 0, { virt_lines = { { { '  ' .. example, 'Comment' } } } })
+  end
   if f and f.choices and #f.choices > 0 then
     local opts = form.options(f, s.typed[f.name])
     local pick = math.max(1, math.min(s.pick or 1, #opts))
@@ -576,7 +581,7 @@ function M.on_preview(n, r)
   if not s or n ~= s.seq then return end
   updating(false)
   s.preview = r
-  s.fields = r.fields or s.fields
+  s.fields = r.fields and form.visible(r.fields) or s.fields
   s.ready = r.ready == true
   render_form()
   local lines, hls = preview.render(r)
@@ -592,7 +597,7 @@ function M.on_preview(n, r)
   end
   if s.focus_first_missing then
     s.focus_first_missing = nil
-    local row = form.first_invalid(s.fields)
+    local row = form.first_to_fill(s.fields)
     if row then M.focus_field(row) end
   end
 end

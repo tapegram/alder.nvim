@@ -171,11 +171,27 @@ end
 test('modal: selecting a generator shows its form; typing a field updates the preview', function()
   sized(140, function()
     local _, s = opened_msg()
+    -- alder#45: the agent flags (--in-for, --when, --id) are left out; name starts at its example
     local names = vim.tbl_map(function(f) return f.name end, s.fields)
-    assert(names[1] == 'page' and names[2] == 'name' and #names == 6, vim.inspect(names))
+    assert(vim.deep_equal(names, { 'page', 'name', 'fields' }), vim.inspect(names))
     local lines = vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false)
-    assert(lines[1] == 'Posts.Index' and lines[2] == '', vim.inspect(lines))
-    assert(not s.ready)
+    assert(lines[1] == 'Posts.Index' and lines[2] == s.fields[2].example and lines[2] ~= '', vim.inspect(lines))
+    assert(s.ready, 'the form is ready as it opens')
+    assert(text_of(s.bufs.preview):find('@@', 1, true), 'no preview on open: ' .. text_of(s.bufs.preview))
+    -- each row's note says what the field means
+    local notes = {}
+    for _, m in ipairs(vim.api.nvim_buf_get_extmarks(s.bufs.form, -1, 0, -1, { details = true })) do
+      if m[4].virt_text_pos == 'eol' then notes[#notes + 1] = m[4].virt_text[1][1] end
+    end
+    assert(#notes == 3 and notes[2]:find(s.fields[2].help, 1, true), vim.inspect(notes))
+    -- the focused field shows its example under it
+    modal.focus_field(3)
+    local virt = {}
+    for _, m in ipairs(vim.api.nvim_buf_get_extmarks(s.bufs.form, -1, 0, -1, { details = true })) do
+      for _, vl in ipairs(m[4].virt_lines or {}) do virt[#virt + 1] = vl[1][1] end
+    end
+    assert(virt[1] == '  e.g. ' .. s.fields[3].example, vim.inspect(virt))
+    modal.focus_search()
     assert(H.float_text():find(' new msg  ', 1, true), 'form title lacks the id:\n' .. H.float_text())
     modal.set_field('name', 'Delete')
     assert(not s.ready, 'ready must drop while the preview is in flight')
@@ -214,7 +230,8 @@ test('modal: typing in the form buffer is a field edit; a joined line is put bac
   sized(140, function()
     local _, s = opened_msg()
     modal.focus_field(2)
-    vim.api.nvim_feedkeys('AToggle', 'x', false)
+    -- `name` starts at its example (alder#45): replace the line, as typing over it does
+    vim.api.nvim_buf_set_lines(s.bufs.form, 1, 2, false, { 'Toggle' })
     modal.on_form_changed()
     assert(s.typed.name == 'Toggle', vim.inspect(s.typed))
     assert(H.wait(10000, function() return s.ready end))
@@ -251,8 +268,13 @@ test('modal: Enter when not ready jumps to the first invalid field; when ready i
   sized(140, function()
     local buf, s = opened_msg()
     local before = text_of(buf)
+    -- the form opens ready (alder#45): an unknown page makes it not ready
+    modal.set_field('page', 'Nope')
+    wait_preview(s)
+    assert(not s.ready, 'ready with an unknown page')
     modal.enter()
-    assert(modal.state == s and s.focus == 2 and vim.api.nvim_get_current_win() == s.win.form, 'enter did not jump to `name`')
+    assert(modal.state == s and s.focus == 1 and vim.api.nvim_get_current_win() == s.win.form, 'enter did not jump to `page`')
+    modal.set_field('page', 'Posts.Index')
     modal.set_field('name', 'Delete')
     -- a preview is in flight: enter must not apply the sets it has not previewed
     modal.enter()
