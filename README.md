@@ -240,11 +240,12 @@ app/Posts/Index.alder (2 holes)`), so the fill is one `gra` away. On the command
 expression you (or an agent) write.
 
 Every applied fill is shown in a message (`alder fill ?delete: …`). The hole's type bounds what
-the expression returns, not what it does, so an expression that makes an HTTP request
-(`Http.*`), changes the session (`Session.put`), writes raw HTML (`Html.unsafe`), pauses
-(`Task.sleep`) or writes rows outside the session's scope (`Db.insert`, `Db.update`,
-`Db.delete`) is applied only after you pick `Apply` in the prompt Neovim shows (`Discard`
-drops it).
+the expression returns, not what it does, so an expression that calls a capability (host Go,
+which can do anything), makes an HTTP request (`Http.*`), changes the session
+(`Session.put`), writes raw HTML (`Html.unsafe`), pauses (`Task.sleep`) or writes rows outside
+the session's scope (`Db.insert`, `Db.update`, `Db.delete`), itself or through a value of your
+app that does (the prompt names the path: `Mail.notify → Email.send`), is applied only after
+you pick `Apply` in the prompt Neovim shows (`Discard` drops it).
 
 What leaves your machine is the prompt: the module's source, **comments and string literals
 included**, the names and types in scope and the standard library's signatures
