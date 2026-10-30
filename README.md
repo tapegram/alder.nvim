@@ -201,7 +201,8 @@ your app, built from your buffers, and the plugin puts the result into **buffers
   `Delete <path> from disk? undo cannot restore it` with `Yes` and `No`; on `No` nothing is applied.
 - If a file changed between the plan and `<CR>`, nothing is applied:
   `alder: <path> changed since planning; nothing applied`. On success:
-  `alder: applied <generator>: <files>`.
+  `alder: applied <generator>: <files>`, with `(<n> holes)` when it left typed holes; the cursor
+  is then on the first of them.
 - When no generator applies at the cursor you get
   `alder: nothing applies here; the first line that has something is <n>`.
 - A generator that adds a table also writes `migrations/*`. The checker reads migrations from
@@ -218,9 +219,23 @@ to run while an `.alder` buffer of the app has unsaved changes: `:wall` first.
 
 A hole is just text. Put `?count` where an expression goes: the server shows it as a hint, `K`
 on it shows the type it must have, and completion at the hole lists the names in scope, those
-whose type fits first. Picking one replaces the whole `?name`. `alder fill` stays a
-command-line tool (`alder fill --list`, `alder fill <Module>.<decl> -` for an agent); the
-plugin has no command for it.
+whose type fits first. Picking one replaces the whole `?name`.
+
+Or let a model fill it: on a hole, `gra` offers `Fill ?delete with AI (Task Nav)` before the
+generators. The server asks the model for one expression, checks it on a copy of your app
+built from your buffers, retries with the checker's errors (three attempts in all), and sends
+back only an expression that checks, as one edit to the buffer (`u` undoes it; nothing is
+saved). The server reads the model from the environment Neovim was started in:
+`ANTHROPIC_API_KEY` (the Anthropic API; `ALDER_FILL_MODEL` picks the model, default
+`claude-opus-5-5`), or `ALDER_FILL_COMMAND`, any command that reads the prompt on standard
+input and prints the expression (`ALDER_FILL_COMMAND='claude -p'`). While it runs, the progress
+(`alder: filling ?delete : Task Nav`, then `attempt 2 of 3: …`) is in `vim.lsp.status()`, which
+statuslines (AstroNvim's, lualine) and fidget.nvim or noice.nvim show. When no answer checks,
+or you edited the buffer meanwhile, a warning shows the model's last expression. After a
+generator is applied, the cursor is on the first hole it left (`alder: applied new msg:
+app/Posts/Index.alder (2 holes)`), so the fill is one `gra` away. On the command line,
+`alder fill <Module>.<decl> --ai` does the same, and `alder fill <Module>.<decl> -` takes an
+expression you (or an agent) write.
 
 ## Development
 

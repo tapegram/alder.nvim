@@ -115,14 +115,25 @@ function M.run(buf, id, sets, on_done, pos)
     end
     local function apply()
       local created, edited = edit(r, files)
-      if created then
+      local holes = null(plan.holes) or {}
+      local first = holes[1]
+      if first then
+        -- the cursor on the first hole the plan left, so `gra` there offers `Fill ?name with AI`
+        local b = vim.fn.bufadd(r .. '/' .. first.file)
+        vim.fn.bufload(b)
+        vim.bo[b].buflisted = true
+        vim.api.nvim_win_set_buf(0, b)
+        pcall(vim.api.nvim_win_set_cursor, 0, { first.line, math.max((first.col or 1) - 1, 0) })
+      elseif created then
         vim.api.nvim_win_set_buf(0, created)
       elseif edited and edited ~= vim.api.nvim_get_current_buf() then
         vim.api.nvim_win_set_buf(0, edited)
       end
       local paths = {}
       for _, f in ipairs(files) do table.insert(paths, f.path) end
-      vim.notify('alder: applied ' .. id .. ': ' .. table.concat(paths, ', '))
+      local left = ''
+      if #holes > 0 then left = (' (%d hole%s)'):format(#holes, #holes == 1 and '' or 's') end
+      vim.notify('alder: applied ' .. id .. ': ' .. table.concat(paths, ', ') .. left)
       if on_done then on_done(plan) end
     end
     if not removed then return apply() end
