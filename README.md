@@ -231,7 +231,9 @@ saved). The server reads the model from the environment Neovim was started in:
 input and prints the expression (`ALDER_FILL_COMMAND='claude -p'`). While it runs, the progress
 (`alder: filling ?delete : Task Nav`, then `attempt 2 of 3: …`) is in `vim.lsp.status()`, which
 statuslines (AstroNvim's, lualine) and fidget.nvim or noice.nvim show. When no answer checks,
-or you edited the buffer meanwhile, a warning shows the model's last expression. After a
+a warning shows the errors and the model's last expression. If you edit the buffer while it
+runs, the server sends no edit (Neovim would not refuse a stale one) and the warning shows the
+expression instead, for you to paste. After a
 generator is applied, the cursor is on the first hole it left (`alder: applied new msg:
 app/Posts/Index.alder (2 holes)`), so the fill is one `gra` away. On the command line,
 `alder fill <Module>.<decl> --ai` does the same, and `alder fill <Module>.<decl> -` takes an
