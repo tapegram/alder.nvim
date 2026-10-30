@@ -239,6 +239,20 @@ app/Posts/Index.alder (2 holes)`), so the fill is one `gra` away. On the command
 `alder fill <Module>.<decl> --ai` does the same, and `alder fill <Module>.<decl> -` takes an
 expression you (or an agent) write.
 
+Every applied fill is shown in a message (`alder fill ?delete: …`). The hole's type bounds what
+the expression returns, not what it does, so an expression that makes an HTTP request
+(`Http.*`), changes the session (`Session.put`), writes raw HTML (`Html.unsafe`), pauses
+(`Task.sleep`) or writes rows outside the session's scope (`Db.insert`, `Db.update`,
+`Db.delete`) is applied only after you pick `Apply` in the prompt Neovim shows (`Discard`
+drops it).
+
+What leaves your machine is the prompt: the module's source, **comments and string literals
+included**, the names and types in scope and the standard library's signatures
+(`alder fill <Module>.<decl> --prompt` prints it). `ALDER_FILL_COMMAND` must be a plain text
+completer, with no tools and no permission bypass (never, say, an agent run with its
+permission checks skipped): the module's comments are part of the prompt, and a tool-using
+agent may take them as instructions and act on your machine.
+
 ## Development
 
 ```sh
