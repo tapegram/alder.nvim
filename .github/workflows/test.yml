@@ -38,8 +38,9 @@ jobs:
           neovim: true
           version: stable
       - name: tests
-        run: nvim --headless -u tests/minimal.lua -l tests/run.lua
+        run: tests/run.sh
         env:
+          ALDER_BIN: ${{ runner.temp }}/bin/alder
           NVIM_TS: ${{ github.workspace }}/nvim-treesitter
           NVIM_NUI: ${{ github.workspace }}/nui.nvim
           ALDER_REPO: ${{ github.workspace }}/alder

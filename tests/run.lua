@@ -1,4 +1,4 @@
--- tests/run.lua: nvim --headless -u tests/minimal.lua -l tests/run.lua [pattern]
+-- tests/run.lua (prefer tests/run.sh, which isolates temp dirs and picks alder): nvim --headless -u tests/minimal.lua -l tests/run.lua [pattern]
 -- Loads tests/*_spec.lua, runs each `test(name, fn)` whose name matches the pattern, prints
 -- ok/FAIL per test, and exits non-zero when any fails.
 local here = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p:h')
@@ -21,4 +21,6 @@ for _, c in ipairs(cases) do
   end
 end
 io.stdout:write(('%d tests, %d failed\n'):format(ran, failed))
+-- os.exit skips Neovim's own cleanup of its tempname dir (every H.tmpdir() lives there)
+vim.fn.delete(vim.fn.fnamemodify(vim.fn.tempname(), ':h'), 'rf')
 os.exit(failed == 0 and ran > 0 and 0 or 1)

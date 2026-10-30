@@ -225,13 +225,20 @@ plugin has no command for it.
 ## Development
 
 ```sh
-nvim --headless -u tests/minimal.lua -l tests/run.lua          # all tests
-nvim --headless -u tests/minimal.lua -l tests/run.lua keys     # tests whose name contains "keys"
+tests/run.sh          # all tests
+tests/run.sh keys     # tests whose name contains "keys"
 ```
 
+`tests/run.sh` runs the suite in one throwaway temp root (`TMPDIR` and the `XDG_*` dirs point
+into it) that is removed at the end, also on failure; `ALDER_TEST_KEEP=1` keeps it. It uses
+`ALDER_BIN`, else `~/go/bin/alder`, else the first `alder` on `PATH`, prints which one, and
+refuses one too old for the plugin (no `help --json` with the `lsp` command). The Go build cache
+stays shared. Running `nvim --headless -u tests/minimal.lua -l tests/run.lua` directly still works
+but uses your own `PATH` and temp dirs.
+
 `NVIM_TS` points at an nvim-treesitter checkout and `NVIM_NUI` at a nui.nvim one (defaults:
-lazy.nvim's), and `ALDER_REPO` at an
-alder checkout (default `~/projects/alder`); `alder` and `tree-sitter` must be on `PATH`.
+lazy.nvim's), and `ALDER_REPO` at an alder checkout (default `~/projects/alder`); `tree-sitter`
+must be on `PATH`.
 
 ## License
 
