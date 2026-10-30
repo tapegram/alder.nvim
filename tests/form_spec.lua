@@ -53,6 +53,55 @@ test('form: toggle, options, first_invalid', function()
   assert(form.first_invalid({ fields[1] }) == nil)
 end)
 
+-- alder#45: the server sends each field's help and example, and marks agent-oriented flags.
+local described = {
+  { name = 'page', kind = 'page', required = true, value = 'Posts.Index', source = 'here', valid = true, help = 'the page the message belongs to', example = 'Posts.Index' },
+  { name = 'name', kind = 'text', required = true, value = 'Archive', source = 'default', valid = true, help = "the message's name", example = 'Archive' },
+  { name = 'fields', kind = 'fieldList', value = '', valid = true, help = 'the values it carries', example = 'note:Text' },
+  { name = 'when', kind = 'text', flag = true, value = '', valid = true, help = 'show the button only when this holds', example = 'model.canWrite', agent = true },
+}
+
+test('form: visible leaves out the agent-oriented flags', function()
+  local names = vim.tbl_map(function(f) return f.name end, form.visible(described))
+  assert(vim.deep_equal(names, { 'page', 'name', 'fields' }), vim.inspect(names))
+  assert(#form.visible(fields) == #fields, 'fields without the mark all show')
+  assert(vim.deep_equal(form.visible(nil), {}))
+end)
+
+test('form: the note carries the help after where the value came from', function()
+  local _, marks = form.lines(form.visible(described), {})
+  assert(marks[1].note == 'from the cursor · the page the message belongs to' and marks[1].note_hl == 'Comment', vim.inspect(marks[1]))
+  assert(marks[2].note == "default · the message's name", vim.inspect(marks[2]))
+  assert(marks[3].note == 'the values it carries', vim.inspect(marks[3]))
+  -- an error still wins
+  local f = vim.deepcopy(described)
+  f[2].valid, f[2].why = false, 'not a name'
+  _, marks = form.lines(f, {})
+  assert(marks[2].note == 'not a name' and marks[2].note_hl == 'DiagnosticError', vim.inspect(marks[2]))
+end)
+
+test('form: a cleared field says which value the server uses instead', function()
+  local lines, marks = form.lines(form.visible(described), { name = '' })
+  assert(lines[2] == '', vim.inspect(lines))
+  assert(marks[2].note == 'default: Archive', vim.inspect(marks[2]))
+  _, marks = form.lines(form.visible(described), { page = '' })
+  assert(marks[1].note == 'from the cursor: Posts.Index', vim.inspect(marks[1]))
+end)
+
+test('form: example_line is the focused field\'s example, nil without one', function()
+  assert(form.example_line(described[3]) == 'e.g. note:Text', form.example_line(described[3]))
+  assert(form.example_line(fields[1]) == nil)
+  assert(form.example_line({ name = 'x', kind = 'bool', example = '' }) == nil)
+end)
+
+test('form: first_to_fill is the first invalid field, else the first at its starting value', function()
+  assert(form.first_to_fill(fields) == 2)
+  assert(form.first_to_fill(described) == 2, 'name is at its example')
+  local f = vim.deepcopy(described)
+  f[2].source = 'you'
+  assert(form.first_to_fill(f) == nil)
+end)
+
 local H = require('helpers')
 
 test('form: module_dirs lists the folders under app/ as dotted prefixes, shallow first', function()

@@ -196,9 +196,10 @@ test('commands: the alder.generate client command opens the modal on that genera
   local s = modal.state
   assert(modal.selected().id == 'new msg')
   assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end), 'no preview')
+  -- the first required field still at the server's starting value (alder#45), or empty
   local first
   for i, f in ipairs(s.fields) do
-    if f.required and (f.value == nil or f.value == '') then first = i break end
+    if f.required and (f.value == nil or f.value == '' or f.source == 'default') then first = i break end
   end
   assert(first and s.focus == first, 'focus ' .. tostring(s.focus) .. ' want ' .. tostring(first))
   modal.close()

@@ -21,9 +21,28 @@ local function current(f, typed)
   return f.value or ''
 end
 
+-- visible are the fields the form shows: all but those the server marks `agent` (alder#45),
+-- flags an agent needs on the command line and a person does by hand after the preview. A
+-- hidden field the cursor prefilled still reaches the server through the preset.
+function M.visible(fields)
+  return vim.tbl_filter(function(f) return not f.agent end, fields or {})
+end
+
+-- example_line is the line under the focused field: its example, nil when it has none.
+function M.example_line(f)
+  if f and f.example and f.example ~= '' then return 'e.g. ' .. f.example end
+end
+
+-- joined is the non-empty parts joined by ` · `, nil when none is.
+local function joined(...)
+  local parts = vim.tbl_filter(function(p) return p ~= nil and p ~= '' end, { ... })
+  if #parts > 0 then return table.concat(parts, ' · ') end
+end
+
 -- lines are the form buffer's lines and, per row, the label (inline, blank for a switch), and
--- the note at the end of the line: `required` while empty, the server's why in error colour,
--- or where the value came from.
+-- the note at the end of the line: the server's why in error colour; `required` while empty;
+-- for a field you cleared, the value the server uses instead (`default: Archive`); else where
+-- the value came from and the field's help (`default · the message's name`).
 function M.lines(fields, typed)
   typed = typed or {}
   local lines, marks = {}, {}
@@ -37,12 +56,15 @@ function M.lines(fields, typed)
       lines[i] = v
     end
     local note, hl
-    if not is_bool(f) and v == '' and f.required then
-      note, hl = 'required', 'Comment'
-    elseif f.why and f.why ~= '' then
+    local from = f.source and M.NOTES[f.source]
+    if f.why and f.why ~= '' and f.why ~= 'required' then
       note, hl = f.why, 'DiagnosticError'
-    elseif f.source and M.NOTES[f.source] then
-      note, hl = M.NOTES[f.source], 'Comment'
+    elseif not is_bool(f) and v == '' and f.value and f.value ~= '' and from then
+      note, hl = from .. ': ' .. f.value, 'Comment'
+    elseif not is_bool(f) and v == '' and f.required then
+      note, hl = 'required', 'Comment'
+    else
+      note, hl = joined(from, f.help), 'Comment'
     end
     marks[i] = { row = i, label = is_bool(f) and '' or (f.name .. string.rep(' ', width - #f.name + 2)), note = note, note_hl = hl }
   end
@@ -76,6 +98,17 @@ end
 function M.first_invalid(fields)
   for i, f in ipairs(fields or {}) do
     if not f.valid then return i end
+  end
+end
+
+-- first_to_fill is the row a preset form (a code action's) focuses: the first invalid field,
+-- else the first required one still at the server's starting value (alder#45 starts required
+-- fields at an example, so the form is ready before you have named anything).
+function M.first_to_fill(fields)
+  local row = M.first_invalid(fields)
+  if row then return row end
+  for i, f in ipairs(fields or {}) do
+    if f.required and f.source == 'default' then return i end
   end
 end
 
