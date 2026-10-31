@@ -1,6 +1,6 @@
 -- modal: the generator UI — one centred nui layout: a search line over the generator list on
 -- the left, the selected generator's form above its live preview on the right. Every edit asks
--- the server for alder/preview; <CR> plans and applies through apply.lua; <C-o> opens the
+-- the server for alder/preview; <CR> plans and applies through apply.lua (from the list it first shows a form still at starting values; <C-CR> applies at once); <C-o> opens the
 -- review. Modelled on durandal.nvim's generate.lua: a state singleton, a sequence number on
 -- previews, an idempotent close.
 local ui = require('alder.ui')
@@ -175,7 +175,8 @@ local function mount()
   map('<C-p>', function() M.move(-1) end)
   map('<Tab>', function() M.focus_field(1) end)
   map('<S-Tab>', function() M.focus_prev() end)
-  map('<CR>', function() M.enter() end)
+  map('<CR>', function() M.enter({ from_list = true }) end)
+  map('<C-CR>', function() M.enter() end)
   map('<C-o>', function() M.review() end)
   map('<Esc>', function() M.close() end)
   map('<C-c>', function() M.close() end)
@@ -504,6 +505,7 @@ function M.form_keys()
   map('<Tab>', M.focus_next)
   map('<S-Tab>', M.focus_prev)
   map('<CR>', function() M.enter() end)
+  map('<C-CR>', function() M.enter() end)
   map('<C-o>', function() M.review() end)
   map('<Esc>', function() M.close() end)
   map('<C-c>', function() M.close() end)
@@ -597,7 +599,7 @@ function M.on_preview(n, r)
   end
   if s.focus_first_missing then
     s.focus_first_missing = nil
-    local row = form.first_to_fill(s.fields)
+    local row = form.first_to_fill(s.fields, s.typed)
     if row then M.focus_field(row) end
   end
 end
@@ -613,7 +615,11 @@ end
 
 -- enter applies when the form is ready, else goes to the first invalid field. While a preview
 -- is in flight it does nothing: the sets on screen are not the ones that were previewed.
-function M.enter()
+-- opts.from_list (Enter in the search list) first shows the form when a required field is still
+-- at the server's starting value and untouched (alder#45), so nothing is generated unseen;
+-- <C-CR> and Enter in the form skip that.
+function M.enter(opts)
+  opts = opts or {}
   local s = M.state
   local sel = M.selected()
   if not s or not sel then return end
@@ -624,6 +630,10 @@ function M.enter()
     local row = form.first_invalid(s.fields)
     if row then M.focus_field(row) end
     return
+  end
+  if opts.from_list then
+    local row = form.first_to_fill(s.fields, s.typed)
+    if row then M.focus_field(row) return end
   end
   apply(s, sel.id)
 end

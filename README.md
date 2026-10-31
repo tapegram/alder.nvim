@@ -96,7 +96,7 @@ run so the grammar matches your compiler.
 | `:AlderCheck` | `alder check`: diagnostics in open buffers, other files in the quickfix list |
 | `:AlderFix` | apply the compiler's fix for the diagnostic under the cursor |
 | `:AlderExplain [code]` | `alder explain` for the code (default: the diagnostic under the cursor) |
-| `:AlderGenerate [id]` | open the generator modal (preset to `id`): search the generators, fill the form, watch the preview, `<CR>` applies, `<C-o>` reviews |
+| `:AlderGenerate [id]` | open the generator modal (preset to `id`): search the generators, fill the form, watch the preview, `<CR>` goes to the form then applies, `<C-CR>` applies at once, `<C-o>` reviews |
 | `:AlderDiagnostics` | the buffers' diagnostics in the quickfix list (`<leader>ac`) |
 | `:AlderTest [args]` | `alder test`: failures land in the quickfix list at their `test` line, compile errors as diagnostics |
 | `:AlderMutate [args]` | `alder test --mutate` in the background: the survivors land in the quickfix list at the mutated expression, `before → after` |
@@ -185,8 +185,11 @@ no server to answer says `alder: the language server is not attached (:checkheal
 `<leader>ag` (or `:AlderGenerate`, or a generator from `gra`) opens the generator modal: a
 search line over the generators (those that apply at the cursor first), the chosen
 generator's form, and a live preview of the diff that updates as you type. `<Tab>` moves
-between fields, `<CR>` applies when every field is valid (else it jumps to the first that is
-not), `<C-o>` opens the full review (what the plan leaves to you, file by file), `<Esc>`
+between fields. `<CR>` in the form applies when every field is valid (else it jumps to the first
+that is not). `<CR>` in the search list jumps to the first required field still at its starting
+value instead of applying (so nothing is generated unseen); once none is, it applies like the
+form. `<C-CR>` applies at once from either place (same not-valid behaviour; some terminals
+cannot send `<C-CR>`, in which case use `<CR>` in the form), `<C-o>` opens the full review (what the plan leaves to you, file by file), `<Esc>`
 closes. The form opens filled: the server starts each required field at an example (or at the
 first page or table when it must name one that exists), so the preview shows a change at once;
 type over the values. Each field's note says where its value came from and what the field
