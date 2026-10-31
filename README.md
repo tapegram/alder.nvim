@@ -180,6 +180,20 @@ If the server stops, the plugin says `alder lsp stopped — :checkhealth alder`.
 no server to answer says `alder: the language server is not attached (:checkhealth alder)`.
 `<leader>ae` with nothing to explain says `alder: no diagnostic under the cursor`.
 
+## Colour swatches
+
+The server answers `textDocument/documentColor` for the colour strings in an `App.alder` `theme`
+declaration. Neovim 0.12 and newer draws them natively, no plugin needed, but the feature is off
+until you turn it on:
+
+```lua
+vim.lsp.document_color.enable(true)
+```
+
+(Checked on Neovim 0.12.5: the default style paints the colour string's background; pass
+`nil, { style = 'virtual' }` after `true` for a swatch beside it.) Neovim 0.11 has no
+built-in support.
+
 ## Applying generators
 
 `<leader>ag` (or `:AlderGenerate`, or a generator from `gra`) opens the generator modal: a
