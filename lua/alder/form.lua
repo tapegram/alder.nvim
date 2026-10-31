@@ -104,11 +104,11 @@ end
 -- first_to_fill is the row a preset form (a code action's) focuses: the first invalid field,
 -- else the first required one still at the server's starting value (alder#45 starts required
 -- fields at an example, so the form is ready before you have named anything).
-function M.first_to_fill(fields)
+function M.first_to_fill(fields, typed)
   local row = M.first_invalid(fields)
   if row then return row end
   for i, f in ipairs(fields or {}) do
-    if f.required and f.source == 'default' then return i end
+    if f.required and f.source == 'default' and not (typed and typed[f.name] ~= nil) then return i end
   end
 end
 
