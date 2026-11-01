@@ -4,7 +4,6 @@ M.actions = {
   generate = function() require('alder.project').generate() end,
   diagnostics = function() vim.diagnostic.setqflist({ title = 'alder diagnostics', open = true }) end,
   explain = function() require('alder.check').explain() end,
-  run = function() require('alder.commands').alder({ 'run' }) end,
   test = function() require('alder.test').for_current() end,
   test_at = function() require('alder.test').at_cursor() end,
   mutate = function() require('alder.test').mutate_for_current() end,
@@ -21,7 +20,7 @@ M.actions = {
 
 -- PROJECT are the actions that need an Alder project but no .alder buffer: they are global maps
 -- (attach_global) that say so outside a project. The rest are buffer-local maps in .alder files.
-M.PROJECT = { generate = true, run = true, test = true, scratch = true, routes = true }
+M.PROJECT = { generate = true, test = true, scratch = true, routes = true }
 
 -- MODES are the modes an action is mapped in (default: normal only); in 'x' the action gets 'x'.
 M.MODES = { send = { 'n', 'x' } }
@@ -30,7 +29,6 @@ local DESC = {
   generate = 'alder: generate (the generator modal)',
   diagnostics = 'alder: diagnostics to quickfix',
   explain = 'alder: explain the diagnostic',
-  run = 'alder: run',
   test = 'alder: run the tests',
   test_at = 'alder: run the test under the cursor',
   mutate = 'alder: mutation testing (survivors to quickfix)',

@@ -68,7 +68,6 @@ require('alder').setup({
     generate = '<leader>ag',
     diagnostics = '<leader>ac',
     explain = '<leader>ae',
-    run = '<leader>ar',
     test = '<leader>at',
     test_at = '<leader>aT',
     mutate = '<leader>am',
@@ -122,7 +121,10 @@ buffer's file or the cwd is inside an Alder project (an `app/` directory above i
 they say `alder: not in an Alder project`. The **buffer-only** maps exist only in `.alder` buffers.
 
 Project-level (global): `<leader>ag` (generator modal; from a non-`.alder` buffer it opens the app's
-`app/App.alder` first), `<leader>ar` (run), `<leader>at` (test), `<leader>ax` (scratch file), `<leader>au` (routes).
+`app/App.alder` first), `<leader>at` (test), `<leader>ax` (scratch file), `<leader>au` (routes).
+
+Run the app from a terminal (`alder run`), not from the editor: a server started in an editor
+terminal is not tracked, so closing its window leaves it running with no way to reach it again.
 
 Buffer-only (`.alder` buffers): `<leader>ac`, `<leader>ae`, `<leader>aT`, `<leader>am`, `<leader>as`, and `<leader>ao` (in `scratch.alder` only).
 
@@ -133,7 +135,6 @@ All of them:
 | `<leader>ag` | the generator modal |
 | `<leader>ac` | diagnostics to the quickfix list |
 | `<leader>ae` | explain the diagnostic under the cursor |
-| `<leader>ar` | `alder run` |
 | `<leader>at` | `alder test`; failures land in the quickfix list at their `test` line, compile errors as diagnostics |
 | `<leader>aT` | run the test under the cursor (the module's tests when none is above it) |
 | `<leader>am` | `alder test --mutate` in the background; the survivors land in the quickfix list at the mutated expression, `before → after` |

@@ -104,7 +104,7 @@ function M.complete(arglead, cmdline)
 end
 
 local GENERATORS = { new = true, edit = true, remove = true, fill = true, regen = true }
-local TERMINAL = { run = true, repl = true }
+local TERMINAL = { repl = true }
 
 -- alder is :Alder <args…>: generators preview and apply, check publishes diagnostics,
 -- long-running commands get a terminal, everything else prints its output verbatim.
@@ -119,6 +119,13 @@ function M.alder(fargs)
   local app_root = require('alder.project').root(0)
   if name == 'check' then
     require('alder.check').for_current({ open_qf = true })
+    return
+  end
+  -- `alder run` is not driven from the editor: the terminal it used tracked neither the job nor
+  -- its buffer, so closing the window left the server running and unreachable. Run it in a real
+  -- terminal instead, where it can be stopped and watched.
+  if name == 'run' then
+    vim.notify('alder: run the app from a terminal (`alder run`)', vim.log.levels.WARN)
     return
   end
   if TERMINAL[name] or (name == 'logs' and vim.tbl_contains(fargs, '-f')) then
