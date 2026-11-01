@@ -39,16 +39,17 @@ local function break_per_page()
   return buf, l
 end
 
-test('keys: ag ac ae ar at are buffer-local; aa is gone (plan 2)', function()
+test('keys: ag ac ae at are buffer-local; aa is gone (plan 2)', function()
   vim.g.mapleader = ' '
   blog_buf('app/Post.alder')
   for _, k in ipairs({ '<leader>ac', '<leader>ae' }) do
     assert(mapped(k), k .. ' not mapped')
   end
-  for _, k in ipairs({ '<leader>ag', '<leader>ar', '<leader>at', '<leader>ax', '<leader>au' }) do
+  for _, k in ipairs({ '<leader>ag', '<leader>at', '<leader>ax', '<leader>au' }) do
     assert(gmapped(k) and not mapped(k), k .. ' is not a project-level map')
   end
   assert(not mapped('<leader>aa'))
+  assert(not gmapped('<leader>ar'), '<leader>ar was removed: run the app from a terminal')
   assert(mapped('<leader>aT'), '<leader>aT not mapped')
   assert(mapped('<leader>am'), '<leader>am not mapped')
   assert(not gmapped('<leader>ax', 'x'), '<leader>ax is normal mode only')
@@ -58,15 +59,15 @@ end)
 
 test('keys: false disables one key', function()
   vim.g.mapleader = ' '
-  with_opts({ keys = { run = false } }, function()
+  with_opts({ keys = { generate = false } }, function()
     blog_buf('app/Post.alder')
-    assert(not gmapped('<leader>ar'))
-    assert(gmapped('<leader>ag'))
+    assert(not gmapped('<leader>ag'))
+    assert(gmapped('<leader>at'))
   end)
   with_opts({ keys = { test = false } }, function()
     blog_buf('app/Post.alder')
     assert(not gmapped('<leader>at'))
-    assert(gmapped('<leader>ar'))
+    assert(gmapped('<leader>ag'))
   end)
   with_opts({ keys = { test_at = false } }, function()
     blog_buf('app/Post.alder')
@@ -150,14 +151,14 @@ test('keys: project maps outside an Alder project say so', function()
   local messages, restore = H.capture_notify()
   local ok, err = pcall(function()
     vim.cmd.enew()
-    for _, k in ipairs({ '<leader>ag', '<leader>ax', '<leader>au', '<leader>at', '<leader>ar' }) do
+    for _, k in ipairs({ '<leader>ag', '<leader>ax', '<leader>au', '<leader>at' }) do
       vim.api.nvim_feedkeys(vim.keycode(k), 'x', false)
     end
   end)
   restore()
   vim.cmd.cd(old)
   assert(ok, err)
-  assert(#messages == 5, vim.inspect(messages))
+  assert(#messages == 4, vim.inspect(messages))
   for _, m in ipairs(messages) do assert(m.msg == 'alder: not in an Alder project', m.msg) end
 end)
 
