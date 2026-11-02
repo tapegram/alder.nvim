@@ -9,7 +9,7 @@ local function capture()
     ok = function(m) table.insert(reports, { 'ok', m }) end,
     warn = function(m) table.insert(reports, { 'warn', m }) end,
     error = function(m) table.insert(reports, { 'error', m }) end,
-    info = function() end,
+    info = function(m) table.insert(reports, { 'info', m }) end,
   }
   local ok, err = pcall(require('alder.health').check)
   vim.health = orig
@@ -109,4 +109,24 @@ test('health: a running alder client with alderScratch is ok, without it a warni
   assert(found, vim.inspect(ok))
   local bad = run(client({}))
   assert(warns_matching(bad, 'LspRestart') == 1, vim.inspect(bad))
+end)
+
+test('health: one semantic tokens report per running client, by the offer and the option', function()
+  local cfg = require('alder.config')
+  local lsp = require('alder.lsp')
+  local orig, saved = lsp.status, cfg.options.semantic_tokens
+  local function run(offer, opt)
+    lsp.status = function() return { { root = '/x', running = true, semantic_tokens = offer } } end
+    cfg.options.semantic_tokens = opt
+    local ok, reports = pcall(capture)
+    lsp.status, cfg.options.semantic_tokens = orig, saved
+    assert(ok, reports)
+    local out = {}
+    for _, r in ipairs(reports) do if r[2]:find('semantic tokens', 1, true) then table.insert(out, r[1]) end end
+    return out
+  end
+  assert(vim.deep_equal(run(true, false), { 'info' }), vim.inspect(run(true, false)))
+  assert(vim.deep_equal(run(true, true), { 'ok' }), vim.inspect(run(true, true)))
+  assert(vim.deep_equal(run(false, true), { 'warn' }), vim.inspect(run(false, true)))
+  assert(vim.deep_equal(run(false, false), {}), vim.inspect(run(false, false)))
 end)

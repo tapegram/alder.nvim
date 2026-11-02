@@ -100,3 +100,38 @@ test('lsp: a request the closing client refuses calls on_err, never cb', functio
   c.request = orig
   assert(not called and got and got.message == 'alder lsp stopped — :checkhealth alder', vim.inspect(got))
 end)
+
+local TOKENS = 'textDocument/semanticTokens/full'
+
+test('lsp: semantic tokens are stripped by default and the offer is recorded', function()
+  local root = blog()
+  vim.cmd.edit(root .. '/app/Posts/Show.alder')
+  local buf = vim.api.nvim_get_current_buf()
+  assert(attached(buf))
+  local c = require('alder.lsp').client(buf)
+  assert(not c:supports_method(TOKENS, buf), 'semantic tokens still advertised')
+  local st
+  for _, s in ipairs(require('alder.lsp').status()) do if s.root == c.root_dir then st = s end end
+  assert(st and st.semantic_tokens == true, vim.inspect(st))
+  H.wait(1500, function() return false end) -- time for a token request, had one been sent
+  local got = vim.lsp.semantic_tokens.get_at_pos(buf, 0, 0)
+  assert(not got or #got == 0, vim.inspect(got))
+end)
+
+test('lsp: opts.semantic_tokens = true keeps the server tokens', function()
+  local saved = require('alder.config').options
+  require('alder.config').set({ semantic_tokens = true, path = saved.path })
+  local root = blog()
+  vim.cmd.edit(root .. '/app/Posts/Show.alder')
+  local buf = vim.api.nvim_get_current_buf()
+  local ok, err = pcall(function()
+    assert(attached(buf))
+    assert(require('alder.lsp').client(buf):supports_method(TOKENS, buf), 'semantic tokens stripped despite the opt in')
+    assert(H.wait(5000, function()
+      local got = vim.lsp.semantic_tokens.get_at_pos(buf, 0, 0)
+      return got and #got > 0
+    end), 'no server token on `module`')
+  end)
+  require('alder.config').options = saved
+  assert(ok, err)
+end)

@@ -6,6 +6,7 @@ M.defaults = {
   preview = true, -- generators show their diff before writing
   path = nil, -- an alder checkout to install the parser from (grammar development)
   lsp = true, -- attach `alder lsp`; false keeps CLI mode
+  semantic_tokens = false, -- use the server's semantic tokens; false keeps tree-sitter the one source of colour
   keys = { generate = '<leader>ag', diagnostics = '<leader>ac', explain = '<leader>ae', test = '<leader>at', test_at = '<leader>aT', mutate = '<leader>am', scratch = '<leader>ax', routes = '<leader>au', send = '<leader>as', scratch_value = '<leader>ao' }, -- each can be false
   revision = nil, -- a tag of tapegram/alder to install the parser from, e.g. 'v0.2.0'
 }
