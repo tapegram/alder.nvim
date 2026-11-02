@@ -37,8 +37,18 @@ function M.check()
     h.warn('opts.lsp is false: CLI mode')
   else
     local status = require('alder.lsp').status()
+    local tokens = require('alder.config').options.semantic_tokens
     for _, s in ipairs(status) do
-      if s.running then h.ok(('alder lsp running for `%s`'):format(s.root)) end
+      if s.running then
+        h.ok(('alder lsp running for `%s`'):format(s.root))
+        if s.semantic_tokens and not tokens then
+          h.info(('alder lsp for `%s` offers semantic tokens; ignored (tree-sitter colours; opts.semantic_tokens = true to use them)'):format(s.root))
+        elseif s.semantic_tokens then
+          h.ok(('alder lsp for `%s` provides semantic tokens (opts.semantic_tokens = true)'):format(s.root))
+        elseif tokens then
+          h.warn(('opts.semantic_tokens is true but alder lsp for `%s` offers no semantic tokens: update alder, or :LspRestart'):format(s.root))
+        end
+      end
     end
     if #status == 0 then h.info('no alder lsp running (open an .alder file inside an app)') end
     for _, c in ipairs(vim.lsp.get_clients({ name = 'alder' })) do

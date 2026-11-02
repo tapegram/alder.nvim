@@ -64,6 +64,7 @@ require('alder').setup({
   check_on_save = true, -- run alder check after writing an .alder file
   preview = true,       -- the `:Alder` CLI path shows the diff first; <CR> applies, q discards (not the modal)
   lsp = true,           -- start `alder lsp` for .alder buffers; false keeps CLI mode
+  semantic_tokens = false, -- colour from the server's semantic tokens too; false keeps tree-sitter's
   keys = {              -- each can be false; generate/run/test/scratch/routes are global (see Keys)
     generate = '<leader>ag',
     diagnostics = '<leader>ac',
@@ -180,6 +181,13 @@ only when the current one has that title).
 If the server stops, the plugin says `alder lsp stopped — :checkhealth alder`. A request with
 no server to answer says `alder: the language server is not attached (:checkhealth alder)`.
 `<leader>ae` with nothing to explain says `alder: no diagnostic under the cursor`.
+
+## Semantic tokens
+
+`alder lsp` offers semantic tokens (for editors without tree-sitter), and they say nothing the
+tree-sitter highlights do not, so the plugin ignores them by default and keeps one source of
+colour. `opts.semantic_tokens = true` lets Neovim layer them over tree-sitter, and
+`:checkhealth alder` reports whether the server offers them.
 
 ## Colour swatches
 

@@ -3,6 +3,9 @@ local root = require('alder.root')
 
 local M = {}
 local leaving = false
+-- offers_tokens[client id]: whether the server advertised semanticTokensProvider, recorded in
+-- on_init before the opt-out strips it (for :checkhealth)
+local offers_tokens = {}
 vim.api.nvim_create_autocmd('VimLeavePre', { callback = function() leaving = true end })
 
 -- A buffer that detaches from the alder client is no longer covered by the server.
@@ -22,8 +25,17 @@ function M.start(buf)
     cmd = { config.options.cmd, 'lsp' },
     root_dir = r,
     handlers = { ['alder/scratch'] = require('alder.scratch').handler },
+    -- Neovim schedules the semantic token start after on_attach and reads the capability then,
+    -- so deleting it here keeps tree-sitter the one source of colour (0.11 has no
+    -- vim.lsp.semantic_tokens.enable). on_init runs before any buffer attaches.
+    on_init = function(client)
+      local caps = client.server_capabilities or {}
+      offers_tokens[client.id] = caps.semanticTokensProvider ~= nil
+      if not config.options.semantic_tokens then caps.semanticTokensProvider = nil end
+    end,
     on_attach = function(_, b) vim.b[b].alder_lsp = true end,
-    on_exit = function(code, signal)
+    on_exit = function(code, signal, client_id)
+      offers_tokens[client_id] = nil
       vim.schedule(function()
         if not leaving and (code ~= 0 or signal ~= 0) then
           vim.notify('alder lsp stopped — :checkhealth alder', vim.log.levels.WARN)
@@ -74,7 +86,7 @@ end
 function M.status()
   local out = {}
   for _, c in ipairs(vim.lsp.get_clients({ name = 'alder' })) do
-    table.insert(out, { root = c.root_dir, running = not c:is_stopped() })
+    table.insert(out, { root = c.root_dir, running = not c:is_stopped(), semantic_tokens = offers_tokens[c.id] })
   end
   return out
 end
