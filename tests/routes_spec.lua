@@ -181,3 +181,19 @@ test('routes: <leader>au and :AlderRoutes exist', function()
   assert(vim.fn.exists(':AlderRoutes') == 2)
   assert(vim.fn.maparg(vim.keycode('<leader>au'), 'n') ~= '', '<leader>au not mapped')
 end)
+
+test('routes: a PATCH route shows PATCH (CLI and LSP), and kind is the fallback without a method', function()
+  local cli = routes.normalize_cli({
+    { kind = 'msg', method = 'PATCH', path = '/sites/:id', module = 'Sites', name = 'Rename', file = 'app/Sites.alder', line = 1, col = 1 },
+    { kind = 'msg', path = '/old', module = 'Sites', name = 'Old', file = 'app/Sites.alder', line = 2, col = 1 },
+    { kind = 'page', path = '/', module = 'Home', name = 'page', file = 'app/Home.alder', line = 1, col = 1 },
+  }, '/proj')
+  assert(routes.label(cli[1]) == 'PATCH /sites/:id  Sites.Rename', routes.label(cli[1]))
+  assert(routes.label(cli[2]) == 'POST /old  Sites.Old', routes.label(cli[2]))
+  assert(routes.label(cli[3]) == 'GET /  Home.page', routes.label(cli[3]))
+  local lsp = routes.normalize_lsp({ { kind = 'msg', method = 'DELETE', path = '/x', module = 'M', name = 'N',
+    uri = vim.uri_from_fname('/x/a.alder'), range = { start = { line = 0, character = 0 }, ['end'] = { line = 0, character = 1 } } } })
+  assert(routes.label(lsp[1]) == 'DELETE /x  M.N', routes.label(lsp[1]))
+  local lines = routes.lines(cli)
+  assert(lines[1]:find('^PATCH /sites/:id  '), lines[1])
+end)

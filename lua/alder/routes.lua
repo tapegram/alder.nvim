@@ -8,13 +8,13 @@ local M = {}
 M.state = nil
 local ns = vim.api.nvim_create_namespace('alder.routes')
 
--- item: { kind, path, module, name, file (absolute), lnum (1-based), col (0-based) }
+-- item: { kind, method (may be nil), path, module, name, file (absolute), lnum (1-based), col (0-based) }
 
 function M.normalize_lsp(result)
   local out = {}
   for _, r in ipairs(result or {}) do
     local start = r.range and r.range.start or { line = 0, character = 0 }
-    out[#out + 1] = { kind = r.kind, path = r.path, module = r.module, name = r.name,
+    out[#out + 1] = { kind = r.kind, method = r.method, path = r.path, module = r.module, name = r.name,
       file = vim.uri_to_fname(r.uri), lnum = start.line + 1, col = start.character }
   end
   return out
@@ -26,13 +26,14 @@ function M.normalize_cli(objects, root)
   for _, r in ipairs(objects or {}) do
     local file = r.file or ''
     if not vim.startswith(file, '/') then file = root .. '/' .. file end
-    out[#out + 1] = { kind = r.kind, path = r.path, module = r.module, name = r.name,
+    out[#out + 1] = { kind = r.kind, method = r.method, path = r.path, module = r.module, name = r.name,
       file = file, lnum = r.line or 1, col = math.max((r.col or 1) - 1, 0) }
   end
   return out
 end
 
-local function verb(r) return r.kind == 'msg' and 'POST' or 'GET' end
+-- verb: the route's method, else (an alder older than `route`) POST for a msg and GET otherwise.
+local function verb(r) return r.method or (r.kind == 'msg' and 'POST' or 'GET') end
 
 function M.label(r)
   return ('%s %s  %s.%s'):format(verb(r), r.path, r.module, r.name)
