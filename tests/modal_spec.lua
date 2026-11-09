@@ -566,3 +566,33 @@ test('modal: <C-CR> applies from the list and the form even at starting values',
     assert(H.wait(10000, function() return modal.state == nil and text_of(buf) ~= before end), '<C-CR> did not apply')
   end)
 end)
+
+-- alder#211: the server refuses a plan whose page is still the one the form guessed, unless the
+-- client sends it; applying or reviewing what the form showed must plan.
+test('modal: a guessed page the user applies without editing plans and applies', function()
+  sized(140, function()
+    local buf = blog_buf('app/Markdown.alder') -- not a route: the page is guessed
+    local s = open(buf)
+    modal.type_query('new msg')
+    assert(H.wait(10000, function() return s.ready and not s.updating end), 'never ready')
+    local page = s.fields[1]
+    assert(page.name == 'page' and page.source == 'default' and #page.choices > 1, vim.inspect(page))
+    assert(form.sets(s.preset, s.typed).page == nil, 'the guessed page is not in the preview sets')
+    modal.review()
+    assert(H.wait(10000, function() return H.float_text():find(' files ', 1, true) ~= nil end), 'no review: ' .. H.float_text())
+    assert(not H.float_text():find('required', 1, true), 'review refused: ' .. H.float_text())
+    vim.api.nvim_feedkeys('q', 'x', false)
+    assert(H.wait(1000, function() return not s.suspended end))
+    local messages, restore = H.capture_notify()
+    modal.enter()
+    assert(H.wait(10000, function()
+      for _, m in ipairs(messages) do
+        if m.msg:find('applied new msg', 1, true) then return true end
+      end
+    end), 'not applied: ' .. vim.inspect(messages))
+    restore()
+    for _, m in ipairs(messages) do
+      assert(not m.msg:find('required', 1, true), vim.inspect(messages))
+    end
+  end)
+end)

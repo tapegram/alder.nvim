@@ -37,6 +37,19 @@ test('form: sets merge the preset and the typed text, dropping empties', functio
   assert(vim.deep_equal(got, {}), 'clearing a preset field drops it')
 end)
 
+test('form: shown_sets echo every shown value under the preset and typed text (alder#211)', function()
+  local fields = {
+    { name = 'page', value = 'Admin.Index', source = 'default' },
+    { name = 'name', value = 'Archive', source = 'default' },
+    { name = 'fields', value = '' },
+    { name = 'when', value = 'x', agent = true },
+  }
+  local got = form.shown_sets(fields, { name = 'Delete' }, {})
+  assert(vim.deep_equal(got, { page = 'Admin.Index', name = 'Delete' }), vim.inspect(got))
+  got = form.shown_sets(fields, {}, { page = 'Posts.Index', name = '' })
+  assert(vim.deep_equal(got, { page = 'Posts.Index' }), 'a cleared field is left to the server: ' .. vim.inspect(got))
+end)
+
 test('form: a default bool is not sent until it is toggled', function()
   assert(form.sets({}, {}).example == nil, 'the server re-decides a default switch')
   assert(form.sets({}, { example = 'false' }).example == 'false')

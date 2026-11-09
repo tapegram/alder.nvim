@@ -87,6 +87,22 @@ function M.sets(preset, typed)
   return out
 end
 
+-- shown_sets is what a plan or an apply sends: every value the form shows (the server's own,
+-- agent flags left out as the form leaves them out), with sets over them. A value the user saw
+-- and accepted counts as chosen, so a page the form guessed to open with plans (alder#211);
+-- previews send only sets, so the server goes on re-deciding its values while the user edits.
+function M.shown_sets(fields, preset, typed)
+  local out = {}
+  for _, f in ipairs(M.visible(fields)) do
+    if (f.value or '') ~= '' then out[f.name] = f.value end
+  end
+  for k, v in pairs(typed or {}) do
+    if v == '' then out[k] = nil end
+  end
+  for k, v in pairs(M.sets(preset, typed)) do out[k] = v end
+  return out
+end
+
 -- options are a choice field's choices matching the typed text (all for none).
 function M.options(f, typed)
   local all = f.choices or {}

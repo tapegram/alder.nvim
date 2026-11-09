@@ -25,10 +25,12 @@ local function params(s, extra)
   return p
 end
 
--- sets_payload is the sets to send: an object even when empty.
-local function sets_payload(s)
+-- sets_payload is the sets to send: an object even when empty. shown (a plan or an apply)
+-- adds every value the form shows, so what the user saw is what is planned (alder#211).
+local function sets_payload(s, shown)
   local out = vim.empty_dict()
-  for k, v in pairs(form.sets(s.preset, s.typed)) do out[k] = v end
+  local sets = shown and form.shown_sets(s.fields, s.preset, s.typed) or form.sets(s.preset, s.typed)
+  for k, v in pairs(sets) do out[k] = v end
   return out
 end
 
@@ -608,7 +610,7 @@ end
 
 -- apply closes the modal and applies id with the current sets through apply.lua.
 local function apply(s, id, planned)
-  local buf, sets, pos = s.buf, planned or sets_payload(s), s.origin.cursor
+  local buf, sets, pos = s.buf, planned or sets_payload(s, true), s.origin.cursor
   M.close()
   require('alder.apply').run(buf, id, sets, nil, pos)
 end
@@ -645,13 +647,13 @@ function M.review()
   if not s or not sel then return end
   M.on_form_changed() -- a keystroke still unread counts
   M.commit_option()
-  local planned = sets_payload(s)
+  local planned = sets_payload(s, true)
   request(s.buf, 'alder/plan', params(s, { id = sel.id, sets = planned }), function(plan)
     local st = M.state
     if st ~= s then return end
     -- the form changed while the plan was in flight: it is not the plan of what is on screen
     local now = M.selected()
-    if not now or now.id ~= sel.id or not vim.deep_equal(planned, sets_payload(st)) then return end
+    if not now or now.id ~= sel.id or not vim.deep_equal(planned, sets_payload(st, true)) then return end
     st.suspended = true
     vim.cmd.stopinsert()
     local shown = require('alder.review').open(ui.plain(plan) or {}, {
