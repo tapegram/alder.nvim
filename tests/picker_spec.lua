@@ -3,7 +3,7 @@ local picker = require('alder.picker')
 local items = {
   { id = 'new msg', summary = 'a message and its update arm', here = true },
   { id = 'new form', summary = 'a form, its message and arm', here = true },
-  { id = 'new page', summary = 'a page module' },
+  { id = 'new route', summary = 'a route module' },
   { id = 'edit table', summary = 'change a table' },
 }
 
@@ -16,8 +16,8 @@ end)
 test('picker: fuzzy on id and summary', function()
   local got = picker.filter(items, 'tbl')
   assert(#got == 1 and got[1].id == 'edit table', vim.inspect(got))
-  got = picker.filter(items, 'page')
-  assert(got[1].id == 'new page', vim.inspect(got))
+  got = picker.filter(items, 'route')
+  assert(got[1].id == 'new route', vim.inspect(got))
   assert(#picker.filter(items, 'zzzz') == 0)
 end)
 

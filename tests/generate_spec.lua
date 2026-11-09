@@ -7,19 +7,19 @@ local function preview_buf()
   end
 end
 
-test('generate: :Alder new page previews, then <CR> applies and opens the page', function()
+test('generate: :Alder new route previews, then <CR> applies and opens the route module', function()
   local app = H.new_app()
   vim.cmd.edit(app .. '/app/App.alder')
-  vim.cmd('Alder new page Hello /hello')
+  vim.cmd('Alder new route Hello /hello')
   assert(H.wait(20000, function() return preview_buf() ~= nil end), 'no preview')
   local buf = preview_buf()
   local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
   assert(text:find('created app/Hello.alder', 1, true), text)
-  assert(text:find('page "/hello"', 1, true), text)
+  assert(text:find('route Hello = GET "/hello"', 1, true), text)
   assert(not vim.uv.fs_stat(app .. '/app/Hello.alder'), 'the preview wrote the file')
   generate.apply_preview(buf)
   assert(H.wait(20000, function() return vim.uv.fs_stat(app .. '/app/Hello.alder') ~= nil end), 'not applied')
-  assert(H.wait(5000, function() return vim.api.nvim_buf_get_name(0):match('Hello%.alder$') end), 'the new page did not open')
+  assert(H.wait(5000, function() return vim.api.nvim_buf_get_name(0):match('Hello%.alder$') end), 'the new route did not open')
 end)
 
 test('generate: refused while an .alder buffer has unsaved changes', function()
@@ -27,7 +27,7 @@ test('generate: refused while an .alder buffer has unsaved changes', function()
   vim.cmd.edit(app .. '/app/App.alder')
   vim.api.nvim_buf_set_lines(0, -1, -1, false, { '-- unsaved' })
   local messages, restore = H.capture_notify()
-  vim.cmd('Alder new page Hello /hello')
+  vim.cmd('Alder new route Hello /hello')
   restore()
   assert(messages[1] and messages[1].msg == 'alder: save all buffers first (:wall)', vim.inspect(messages))
   assert(preview_buf() == nil)
@@ -38,10 +38,10 @@ test('generate: a refusal is shown verbatim', function()
   vim.cmd.edit(app .. '/app/App.alder')
   local messages, restore = H.capture_notify()
   local done = false
-  generate.run({ 'new', 'page', 'Hello', '/hello', '--list', 'NoSuchTable' }, { on_done = function() done = true end })
+  generate.run({ 'new', 'route', 'Hello', '/hello', '--list', 'NoSuchTable' }, { on_done = function() done = true end })
   assert(H.wait(20000, function() return done end))
   restore()
-  local r = vim.system({ 'alder', 'new', 'page', 'Hello', '/hello', '--list', 'NoSuchTable', '--json', '--dry-run', '--dir', app },
+  local r = vim.system({ 'alder', 'new', 'route', 'Hello', '/hello', '--list', 'NoSuchTable', '--json', '--dry-run', '--dir', app },
     { text = true, cwd = app }):wait()
   local err = vim.json.decode(r.stdout).error
   assert(err and messages[1] and messages[1].msg == err, vim.inspect({ messages, err }))
@@ -65,7 +65,7 @@ test('generate: a second preview gets the name alder://preview', function()
   for _, n in ipairs({ 'A', 'B' }) do
     vim.cmd.edit(app .. '/app/App.alder') -- the preview window has no app root of its own
     local done = false
-    generate.run({ 'new', 'page', n, '/' .. n:lower() }, { on_done = function() done = true end })
+    generate.run({ 'new', 'route', n, '/' .. n:lower() }, { on_done = function() done = true end })
     assert(H.wait(20000, function() return done end))
   end
   local count = 0

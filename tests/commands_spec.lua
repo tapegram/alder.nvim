@@ -7,10 +7,10 @@ test('completion: commands, generators and flags from alder help --json', functi
   local top = commands.complete('', 'Alder ')
   assert(has(top, 'check') and has(top, 'new') and has(top, 'fill'), vim.inspect(top))
   local gens = commands.complete('', 'Alder new ')
-  assert(has(gens, 'page') and has(gens, 'table'), vim.inspect(gens))
-  local flags = commands.complete('--l', 'Alder new page --l')
+  assert(has(gens, 'route') and has(gens, 'table'), vim.inspect(gens))
+  local flags = commands.complete('--l', 'Alder new route --l')
   assert(has(flags, '--list') and not has(flags, '--json'), vim.inspect(flags))
-  assert(#commands.complete('', 'Alder new page --list ') == 0, 'a flag value is free text')
+  assert(#commands.complete('', 'Alder new route --list ') == 0, 'a flag value is free text')
 end)
 
 test('completion: keypresses never spawn alder; :Alder re-checks the version', function()
@@ -19,7 +19,7 @@ test('completion: keypresses never spawn alder; :Alder re-checks the version', f
   vim.system = function(...) spawned = spawned + 1 return orig(...) end
   for _ = 1, 3 do
     commands.complete('', 'Alder ')
-    commands.complete('--l', 'Alder new page --l')
+    commands.complete('--l', 'Alder new route --l')
   end
   assert(spawned == 0, 'completion spawned ' .. spawned)
   commands.refresh()
@@ -42,7 +42,7 @@ test('commands: with no help tree, :Alder new <kind> runs nothing and writes not
   commands.find = function() return nil end
   require('alder.cli').run = function(...) ran = ran + 1 return orig_run(...) end
   local messages, restore = H.capture_notify()
-  commands.alder({ 'new', 'page', 'Hello', '/hello' })
+  commands.alder({ 'new', 'route', 'Hello', '/hello' })
   restore()
   commands.find, require('alder.cli').run = orig_find, orig_run
   assert(ran == 0, 'cli.run was called')

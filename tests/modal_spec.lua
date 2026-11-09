@@ -89,10 +89,10 @@ test('modal: typing filters, arrows move, an empty list is harmless', function()
     assert(vim.deep_equal(vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false), { '' }))
     assert(H.float_text():find(' 0 of ', 1, true), H.float_text())
     -- typing in the search buffer itself drives the same path
-    vim.api.nvim_buf_set_lines(s.bufs.search, 0, -1, false, { 'page' })
+    vim.api.nvim_buf_set_lines(s.bufs.search, 0, -1, false, { 'route' })
     modal.on_search_changed()
-    assert(s.query == 'page', s.query)
-    assert(modal.selected().id:find('page', 1, true))
+    assert(s.query == 'route', s.query)
+    assert(modal.selected().id:find('route', 1, true))
   end)
 end)
 
@@ -244,7 +244,7 @@ end)
 
 test('modal: a choice field lists options; Down picks, Tab commits; passing over it commits nothing', function()
   sized(140, function()
-    local _, s = opened_msg('remove page')
+    local _, s = opened_msg('remove route')
     modal.focus_field(1)
     local f = s.fields[1]
     assert(f.choices and #f.choices >= 2, vim.inspect(f))
@@ -415,7 +415,7 @@ test('modal: a bool flag renders as a switch; Space toggles it into the sets', f
   sized(140, function()
     local buf = blog_buf('app/Posts/Index.alder')
     local s = open(buf)
-    modal.type_query('new page')
+    modal.type_query('new route')
     wait_preview(s)
     local function find()
       for i, f in ipairs(s.fields) do
@@ -424,7 +424,7 @@ test('modal: a bool flag renders as a switch; Space toggles it into the sets', f
     end
     local function line(row) return vim.api.nvim_buf_get_lines(s.bufs.form, row - 1, row, false)[1] end
     local row = find()
-    assert(row, 'new page has no `example` flag: build alder from the m6b-plan2 branch (go install ./cmd/alder)')
+    assert(row, 'new route has no `example` flag: build alder from the m6b-plan2 branch (go install ./cmd/alder)')
     assert(line(row) == '[x] example', vim.inspect(vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false)))
     assert(form.sets(s.preset, s.typed).example == nil, 'a default must not be sent')
     modal.focus_field(row)
@@ -449,13 +449,13 @@ test('modal: arrowing onto a switch row leaves insert mode so Space toggles', fu
   sized(140, function()
     local buf = blog_buf('app/Posts/Index.alder')
     local s = open(buf)
-    modal.type_query('new page')
+    modal.type_query('new route')
     wait_preview(s)
     local brow
     for i, f in ipairs(s.fields) do
       if f.kind == 'bool' then brow = i break end
     end
-    assert(brow and brow > 1, 'new page needs a text field above a switch')
+    assert(brow and brow > 1, 'new route needs a text field above a switch')
     -- the headless loop never applies :startinsert, so watch for the :stopinsert instead
     modal.focus_field(brow - 1)
     local stops, orig = 0, vim.cmd.stopinsert
@@ -504,13 +504,13 @@ end
 test('modal: a module field shows where the name lands and suggests existing folders (#15)', function()
   sized(140, function()
     local buf = blog_buf('app/Posts/Index.alder')
-    local s = open(buf, { generator = 'new page' })
+    local s = open(buf, { generator = 'new route' })
     assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end), 'no preview')
     local row
     for i, f in ipairs(s.fields) do
       if f.kind == 'module' then row = i break end
     end
-    assert(row, 'new page has no module field')
+    assert(row, 'new route has no module field')
     modal.focus_field(row)
     modal.set_field(s.fields[row].name, 'Pos')
     local text = form_virt(s)
