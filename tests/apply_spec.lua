@@ -16,17 +16,17 @@ end
 
 local function text(buf) return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n') end
 
-test('apply: new msg edits the buffer, nothing on disk, one undo', function()
+test('apply: new action edits the buffer, nothing on disk, one undo', function()
   local buf, root = blog_buf('app/Posts/Index.alder')
   local before = text(buf)
   vim.fn.search('Index.load params')
   local done = false
   local messages, restore = H.capture_notify()
-  apply.run(buf, 'new msg', { name = 'Delete', fields = 'id:Int' }, function() done = true end)
+  apply.run(buf, 'new action', { name = 'Delete', fields = 'id:Int' }, function() done = true end)
   H.wait(10000, function() return done end)
   restore()
   assert(done, 'not applied: ' .. vim.inspect(messages))
-  assert(messages[1].msg == 'alder: applied new msg: app/Posts/Index.alder (2 holes)', vim.inspect(messages))
+  assert(messages[1].msg == 'alder: applied new action: app/Posts/Index.alder (2 holes)', vim.inspect(messages))
   assert(text(buf):find('Delete', 1, true), 'buffer not edited')
   assert(vim.bo[buf].modified)
   assert(not H.read(root .. '/app/Posts/Index.alder'):find('Delete', 1, true), 'wrote to disk')
@@ -39,7 +39,7 @@ test('apply: the cursor lands on the first hole of the plan', function()
   vim.fn.search('Index.load params')
   local done = false
   local messages, restore = H.capture_notify()
-  apply.run(buf, 'new msg', { name = 'Delete', fields = 'id:Int' }, function() done = true end)
+  apply.run(buf, 'new action', { name = 'Delete', fields = 'id:Int' }, function() done = true end)
   H.wait(10000, function() return done end)
   restore()
   assert(done, 'not applied: ' .. vim.inspect(messages))
@@ -69,14 +69,14 @@ test('apply: the position is the one passed, not the window cursor at apply time
   local ok, err = pcall(function()
     lsp.request = function(b, method, params) table.insert(sent, { b = b, method = method, params = params }) end
     vim.api.nvim_win_set_cursor(0, { 3, 2 })
-    apply.run(buf, 'new msg', { name = 'Delete' }, nil, { 7, 4 })
-    apply.run(buf, 'new msg', { name = 'Delete' })
+    apply.run(buf, 'new action', { name = 'Delete' }, nil, { 7, 4 })
+    apply.run(buf, 'new action', { name = 'Delete' })
   end)
   lsp.request = orig
   assert(ok, err)
   assert(sent[1].method == 'alder/plan' and sent[1].b == buf, vim.inspect(sent[1]))
   assert(vim.deep_equal(sent[1].params.position, { line = 6, character = 4 }), vim.inspect(sent[1].params))
-  assert(sent[1].params.id == 'new msg' and sent[1].params.sets.name == 'Delete', vim.inspect(sent[1].params))
+  assert(sent[1].params.id == 'new action' and sent[1].params.sets.name == 'Delete', vim.inspect(sent[1].params))
   assert(sent[1].params.textDocument.uri == vim.uri_from_bufnr(buf))
   assert(vim.deep_equal(sent[2].params.position, { line = 2, character = 2 }), vim.inspect(sent[2].params))
 end)
@@ -94,7 +94,7 @@ test('apply: changed since planning', function()
         cb(result)
       end)
     end
-    apply.run(buf, 'new msg', { name = 'Delete' })
+    apply.run(buf, 'new action', { name = 'Delete' })
     H.wait(10000, function() return #messages > 0 end)
   end)
   lsp.request = orig
@@ -204,7 +204,7 @@ test('apply: a nil plan result does nothing', function()
   local messages, restore = H.capture_notify()
   local ok, err = pcall(function()
     lsp.request = function(_, _, _, cb) cb(nil); cb(vim.NIL) end
-    apply.run(buf, 'new msg', { name = 'Delete' })
+    apply.run(buf, 'new action', { name = 'Delete' })
   end)
   lsp.request = orig
   restore()

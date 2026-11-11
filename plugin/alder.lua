@@ -97,7 +97,7 @@ end, {
   desc = 'run alder <command>: generators preview their diff first',
 })
 
-local STATIC_IDS = { 'new form', 'new msg', 'new decl', 'new test', 'edit page', 'remove page', 'new page', 'new table', 'new capability', 'new admin', 'new auth', 'new type', 'new silo', 'edit table', 'edit decl', 'edit auth', 'edit session', 'remove table', 'regen admin' }
+local STATIC_IDS = { 'new form', 'new action', 'new decl', 'new test', 'edit page', 'remove page', 'new page', 'new table', 'new capability', 'new admin', 'new auth', 'new type', 'new silo', 'edit table', 'edit decl', 'edit auth', 'edit session', 'remove table', 'regen admin' }
 
 -- generator_ids completes :AlderGenerate from the server's list, else from a static one.
 local function generator_ids()
@@ -120,7 +120,7 @@ vim.api.nvim_create_user_command('AlderGenerate', function(o)
   local id = vim.trim(o.args)
   require('alder.modal').open(vim.api.nvim_get_current_buf(), { generator = id ~= '' and id or nil })
 end, {
-  nargs = '*', -- ids have spaces: `new msg`
+  nargs = '*', -- ids have spaces: `new action`
   complete = function(_, cmdline)
     local typed = cmdline:gsub('^%S+%s+', '')
     local out = {}

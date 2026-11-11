@@ -218,7 +218,7 @@ first page or table when it must name one that exists), so the preview shows a c
 type over the values. Each field's note says where its value came from and what the field
 means, and the field under the cursor shows an example (`e.g. note:Text`). A field you clear
 falls back to the cursor's or the starting value, and its note names it (`default: Archive`).
-Flags that matter to agents rather than people (where `new msg` puts its button, `--strict`)
+Flags that matter to agents rather than people (where `new action` puts its button, `--strict`)
 are left out of the form; `:Alder <words>` still takes them. A preset from `gra` focuses the
 first field still at its starting value. A module-name field shows where the name lands (`Sites.Clarity.Index → app/Sites/Clarity/Index.alder`)
 and suggests the existing folders under `app/` as dotted prefixes (`Sites.`, `Sites.Clarity.`);
@@ -267,7 +267,7 @@ statuslines (AstroNvim's, lualine) and fidget.nvim or noice.nvim show. When no a
 a warning shows the errors and the model's last expression. If you edit the buffer while it
 runs, the server sends no edit (Neovim would not refuse a stale one) and the warning shows the
 expression instead, for you to paste. After a
-generator is applied, the cursor is on the first hole it left (`alder: applied new msg:
+generator is applied, the cursor is on the first hole it left (`alder: applied new action:
 app/Posts/Index.alder (2 holes)`), so the fill is one `gra` away. On the command line,
 `alder fill <Module>.<decl> --ai` does the same, and `alder fill <Module>.<decl> -` takes an
 expression you (or an agent) write.

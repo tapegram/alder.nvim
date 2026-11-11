@@ -178,24 +178,24 @@ test('commands: AlderActions is gone; AlderGenerate [id] presets the modal', fun
   assert(vim.fn.exists(':AlderGenerate') == 2)
   blog_buf('app/Posts/Index.alder')
   H.wait(1500, function() return false end)
-  vim.cmd('AlderGenerate new msg')
+  vim.cmd('AlderGenerate new action')
   local modal = require('alder.modal')
   assert(H.wait(5000, function() return modal.state ~= nil and modal.state.bufs ~= nil end))
-  assert(modal.selected().id == 'new msg')
+  assert(modal.selected().id == 'new action')
   modal.close()
-  local comp = vim.fn.getcompletion('AlderGenerate new m', 'cmdline')
-  assert(vim.tbl_contains(comp, 'msg') or vim.tbl_contains(comp, 'new msg'), vim.inspect(comp))
+  local comp = vim.fn.getcompletion('AlderGenerate new a', 'cmdline')
+  assert(vim.tbl_contains(comp, 'action') or vim.tbl_contains(comp, 'new action'), vim.inspect(comp))
 end)
 
 test('commands: the alder.generate client command opens the modal on that generator, focus on the first missing field', function()
   local buf = blog_buf('app/Posts/Index.alder')
   vim.fn.search('load params')
-  vim.lsp.commands['alder.generate']({ command = 'alder.generate', arguments = { { id = 'new msg', sets = { page = 'Posts.Index' } } } },
+  vim.lsp.commands['alder.generate']({ command = 'alder.generate', arguments = { { id = 'new action', sets = { page = 'Posts.Index' } } } },
     { bufnr = buf })
   local modal = require('alder.modal')
   assert(H.wait(5000, function() return modal.state ~= nil and modal.state.bufs ~= nil end), 'modal did not open')
   local s = modal.state
-  assert(modal.selected().id == 'new msg')
+  assert(modal.selected().id == 'new action')
   assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end), 'no preview')
   -- the first required field still at the server's starting value (alder#45), or empty
   local first

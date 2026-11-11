@@ -34,7 +34,7 @@ test('modal: opens with the panes titled, here group first, search focused', fun
     vim.fn.search('load params')
     local s = open(buf)
     local text = H.float_text()
-    for _, t in ipairs({ ' Generate ', ' Preview ', 'new msg' }) do
+    for _, t in ipairs({ ' Generate ', ' Preview ', 'new action' }) do
       assert(text:find(t, 1, true), 'missing ' .. t .. ':\n' .. text)
     end
     -- the group headings are virtual lines above their rows, not buffer text
@@ -72,9 +72,9 @@ test('modal: typing filters, arrows move, an empty list is harmless', function()
   sized(140, function()
     local buf = blog_buf('app/Posts/Index.alder')
     local s = open(buf)
-    modal.type_query('new msg')
-    assert(s.filtered[1].id == 'new msg' and s.selected == 1, vim.inspect(s.filtered))
-    assert(modal.selected().id == 'new msg')
+    modal.type_query('new action')
+    assert(s.filtered[1].id == 'new action' and s.selected == 1, vim.inspect(s.filtered))
+    assert(modal.selected().id == 'new action')
     modal.type_query('')
     modal.move(1)
     assert(s.selected == 2 and modal.selected().id == s.items[2].id)
@@ -158,12 +158,12 @@ local function wait_preview(s)
   assert(H.wait(10000, function() return s.preview ~= nil and not s.updating end), 'no preview answer')
 end
 
--- opened_msg opens the modal on `new msg` at Posts/Index's `load params` and waits for the first preview.
+-- opened_msg opens the modal on `new action` at Posts/Index's `load params` and waits for the first preview.
 local function opened_msg(id)
   local buf = blog_buf('app/Posts/Index.alder')
   vim.fn.search('load params')
   local s = open(buf)
-  modal.type_query(id or 'new msg')
+  modal.type_query(id or 'new action')
   wait_preview(s)
   return buf, s
 end
@@ -173,7 +173,7 @@ test('modal: selecting a generator shows its form; typing a field updates the pr
     local _, s = opened_msg()
     -- alder#45: the agent flags (--in-for, --when, --id) are left out; name starts at its example
     local names = vim.tbl_map(function(f) return f.name end, s.fields)
-    assert(vim.deep_equal(names, { 'page', 'name', 'fields' }), vim.inspect(names))
+    assert(vim.deep_equal(names, { 'page', 'name', 'fields', 'method', 'path' }), vim.inspect(names))
     local lines = vim.api.nvim_buf_get_lines(s.bufs.form, 0, -1, false)
     assert(lines[1] == 'Posts.Index' and lines[2] == s.fields[2].example and lines[2] ~= '', vim.inspect(lines))
     assert(s.ready, 'the form is ready as it opens')
@@ -183,7 +183,7 @@ test('modal: selecting a generator shows its form; typing a field updates the pr
     for _, m in ipairs(vim.api.nvim_buf_get_extmarks(s.bufs.form, -1, 0, -1, { details = true })) do
       if m[4].virt_text_pos == 'eol' then notes[#notes + 1] = m[4].virt_text[1][1] end
     end
-    assert(#notes == 3 and notes[2]:find(s.fields[2].help, 1, true), vim.inspect(notes))
+    assert(#notes == 5 and notes[2]:find(s.fields[2].help, 1, true), vim.inspect(notes))
     -- the focused field shows its example under it
     modal.focus_field(3)
     local virt = {}
@@ -192,7 +192,7 @@ test('modal: selecting a generator shows its form; typing a field updates the pr
     end
     assert(virt[1] == '  e.g. ' .. s.fields[3].example, vim.inspect(virt))
     modal.focus_search()
-    assert(H.float_text():find(' new msg  ', 1, true), 'form title lacks the id:\n' .. H.float_text())
+    assert(H.float_text():find(' new action  ', 1, true), 'form title lacks the id:\n' .. H.float_text())
     modal.set_field('name', 'Delete')
     assert(not s.ready, 'ready must drop while the preview is in flight')
     assert(H.wait(10000, function() return s.ready end), 'never ready: ' .. vim.inspect(s.preview))
@@ -309,8 +309,8 @@ test('modal: a preset selects the generator and focuses the first missing field'
   sized(140, function()
     local buf = blog_buf('app/Posts/Index.alder')
     vim.fn.search('load params')
-    local s = open(buf, { generator = 'new msg', sets = { page = 'Posts.Index' } })
-    assert(modal.selected().id == 'new msg')
+    local s = open(buf, { generator = 'new action', sets = { page = 'Posts.Index' } })
+    assert(modal.selected().id == 'new action')
     assert(H.wait(10000, function() return s.focus == 2 end), 'focus ' .. tostring(s.focus))
     assert(vim.api.nvim_get_current_win() == s.win.form)
   end)
@@ -380,7 +380,7 @@ test('modal: a closed modal\'s preview answer cannot paint into a reopened one',
     local n = a.seq
     modal.close()
     local b = open(buf)
-    modal.type_query('new msg')
+    modal.type_query('new action')
     wait_preview(b)
     modal.set_field('name', 'Delete')
     assert(not b.ready)
@@ -527,7 +527,7 @@ test('modal: Enter from the list focuses a field still at its starting value ins
     local before = text_of(buf)
     assert(H.wait(10000, function() return s.ready end))
     local row = form.first_to_fill(s.fields, s.typed)
-    assert(row, 'new msg has no field at a starting value: ' .. vim.inspect(s.fields))
+    assert(row, 'new action has no field at a starting value: ' .. vim.inspect(s.fields))
     modal.enter({ from_list = true })
     assert(modal.state == s and s.focus == row and vim.api.nvim_get_current_win() == s.win.form, 'enter did not focus the field')
     vim.wait(500)
@@ -573,7 +573,7 @@ test('modal: a guessed page the user applies without editing plans and applies',
   sized(140, function()
     local buf = blog_buf('app/Markdown.alder') -- not a route: the page is guessed
     local s = open(buf)
-    modal.type_query('new msg')
+    modal.type_query('new action')
     assert(H.wait(10000, function() return s.ready and not s.updating end), 'never ready')
     local page = s.fields[1]
     assert(page.name == 'page' and page.source == 'default' and #page.choices > 1, vim.inspect(page))
@@ -587,7 +587,7 @@ test('modal: a guessed page the user applies without editing plans and applies',
     modal.enter()
     assert(H.wait(10000, function()
       for _, m in ipairs(messages) do
-        if m.msg:find('applied new msg', 1, true) then return true end
+        if m.msg:find('applied new action', 1, true) then return true end
       end
     end), 'not applied: ' .. vim.inspect(messages))
     restore()
