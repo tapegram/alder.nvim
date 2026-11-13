@@ -1,7 +1,8 @@
 -- modal: the generator UI — one centred nui layout: a search line over the generator list on
 -- the left, the selected generator's form above its live preview on the right. Every edit asks
 -- the server for alder/preview; <CR> plans and applies through apply.lua (from the list it first shows a form still at starting values; <C-CR> applies at once); <C-o> opens the
--- review. Modelled on durandal.nvim's generate.lua: a state singleton, a sequence number on
+-- review. In the form, <Tab> only moves between fields; <CR> takes an option you moved to (else
+-- applies), <C-y> takes it too and <C-u> clears the field (alder.nvim#13). Modelled on durandal.nvim's generate.lua: a state singleton, a sequence number on
 -- previews, an idempotent close.
 local ui = require('alder.ui')
 local picker = require('alder.picker')
@@ -101,7 +102,7 @@ function M.select(i, preset)
   s.selected = math.max(1, math.min(i, #s.filtered))
   local sel = M.selected()
   s.preset = vim.tbl_extend('force', {}, (sel and sel.sets) or {}, preset or {})
-  s.typed, s.fields, s.focus, s.pick, s.moved, s.preview = {}, {}, nil, 1, false, nil
+  s.typed, s.fields, s.focus, s.pick, s.moved, s.smoved, s.preview = {}, {}, nil, nil, false, false, nil
   invalidate(s)
   updating(false)
   render_list()
@@ -273,14 +274,23 @@ end
 -- virtual text, the note at the end of the line; a focused choice field lists its options
 -- under it; a switch is `[x] name`, toggled with <Space>.
 
--- start_pick is the index of the field's current value among its options (1 when absent).
+-- start_pick is the index of the field's current value among its options, nil when it is none
+-- of them: then no option is highlighted, so nothing looks picked that is not.
 local function start_pick(s, f)
   local cur = s.typed[f.name]
   if cur == nil then cur = f.value end
   for i, o in ipairs(form.options(f, s.typed[f.name])) do
     if o == cur then return i end
   end
-  return 1
+end
+
+-- hint is the form's bottom border: the keys for the focused field.
+local function hint(f)
+  if f and ((f.choices and #f.choices > 0) or f.kind == 'module') then
+    return ' ↑↓ highlight · <CR> takes it · <C-u> clears · <Tab> next '
+  end
+  if f and f.kind ~= 'bool' then return ' <C-u> clears · <Tab> next ' end
+  return ''
 end
 
 render_form = function()
@@ -318,8 +328,8 @@ render_form = function()
   end
   if f and f.choices and #f.choices > 0 then
     local opts = form.options(f, s.typed[f.name])
-    local pick = math.max(1, math.min(s.pick or 1, #opts))
-    local from = math.max(1, math.min(pick - 5, #opts - 5))
+    local pick = s.pick and math.max(1, math.min(s.pick, #opts)) -- nil: nothing highlighted
+    local from = math.max(1, math.min((pick or 1) - 5, #opts - 5))
     local shown = {}
     for k = from, math.min(#opts, from + 5) do
       shown[#shown + 1] = { { (k == pick and '▸ ' or '  ') .. opts[k], k == pick and 'PmenuSel' or 'Pmenu' } }
@@ -343,16 +353,24 @@ render_form = function()
     s.suggestions = nil
   end
   local sel = M.selected()
+  s.popups.form.border:set_text('bottom', hint(f), 'right')
   s.popups.form.border:set_text('top', sel and (' ' .. sel.id .. '  ' .. (sel.summary or '') .. ' ') or ' Form ', 'left')
 end
 
--- set_field records text for field name and asks for a preview (debounced). Typing into a
--- choice field filters its options, so the pick restarts and counts as chosen.
+-- filtered resets the highlight after the field's text changed to text: typing into a choice
+-- field filters its options and highlights the best match for <CR> to take; an empty field
+-- highlights nothing. Only <CR> or <C-y> takes the highlight, never <Tab> (alder.nvim#13).
+local function filtered(s, text)
+  if text == '' then s.pick, s.moved = nil, false else s.pick, s.moved = 1, true end
+  s.spick, s.smoved = 1, false
+end
+
+-- set_field records text for field name and asks for a preview (debounced).
 function M.set_field(name, text)
   local s = M.state
   if not s then return end
   s.typed[name] = text
-  s.pick, s.moved, s.spick = 1, true, 1
+  filtered(s, text)
   render_form()
   M.request_preview()
 end
@@ -362,7 +380,7 @@ function M.focus_field(row)
   local s = M.state
   if not s or #s.fields == 0 then return end
   row = ((row - 1) % #s.fields) + 1
-  s.focus, s.moved = row, false
+  s.focus, s.moved, s.smoved = row, false, false
   s.pick = start_pick(s, s.fields[row])
   vim.api.nvim_set_current_win(s.win.form)
   local line = vim.api.nvim_buf_get_lines(s.bufs.form, row - 1, row, false)[1] or ''
@@ -380,10 +398,10 @@ function M.focus_search()
   vim.cmd.startinsert({ bang = true })
 end
 
+-- focus_next and focus_prev (<Tab>, <S-Tab>) only move: a highlighted option stays untaken.
 function M.focus_next()
   local s = M.state
   if not s then return end
-  M.commit_option()
   if s.focus == nil then return M.focus_field(1) end
   if s.focus >= #s.fields then return M.focus_search() end
   M.focus_field(s.focus + 1)
@@ -392,20 +410,21 @@ end
 function M.focus_prev()
   local s = M.state
   if not s then return end
-  M.commit_option()
   if s.focus == nil then return M.focus_field(#s.fields) end
   if s.focus <= 1 then return M.focus_search() end
   M.focus_field(s.focus - 1)
 end
 
--- option moves through the focused choice field's options; false when there are none.
+-- option moves the highlight through the focused choice field's options (from none, Down goes
+-- to the first and Up to the last); false when there are none.
 function M.option(delta)
   local s = M.state
   local f = s and s.focus and s.fields[s.focus]
   if not f or not f.choices or #f.choices == 0 then return false end
   local n = #form.options(f, s.typed[f.name])
   if n == 0 then return false end
-  s.pick = ((((s.pick or 1) + delta) - 1) % n) + 1
+  if s.pick == nil then s.pick = delta > 0 and 1 or n
+  else s.pick = (((s.pick + delta) - 1) % n) + 1 end
   s.moved = true
   render_form()
   return true
@@ -417,7 +436,6 @@ function M.accept_suggestion()
   local f = s and s.focus and s.fields[s.focus]
   if not f or f.kind ~= 'module' or not s.suggestions or #s.suggestions == 0 then return false end
   local pick = s.suggestions[math.max(1, math.min(s.spick or 1, #s.suggestions))]
-  s.spick = 1
   M.set_field(f.name, pick)
   return true
 end
@@ -428,22 +446,47 @@ function M.suggest(delta)
   local f = s and s.focus and s.fields[s.focus]
   if not f or f.kind ~= 'module' or not s.suggestions or #s.suggestions < 2 then return false end
   s.spick = ((((s.spick or 1) + delta) - 1) % math.min(#s.suggestions, 5)) + 1
+  s.smoved = true
   render_form()
   return true
 end
 
--- commit_option writes the picked option into the focused choice field. It does nothing until
--- the user moved the pick or typed a filter, so passing over a field never rewrites its value.
-function M.commit_option()
+-- take_option writes the highlighted option into the focused choice field and reports whether
+-- it did. It does nothing until the user moved the highlight or typed a filter, nor when the
+-- highlight is already the value, so <CR> on a field you only passed over applies instead.
+function M.take_option()
   local s = M.state
   local f = s and s.focus and s.fields[s.focus]
-  if not f or not s.moved or not f.choices or #f.choices == 0 then return end
+  if not f or not s.moved or not s.pick or not f.choices or #f.choices == 0 then return false end
   local opts = form.options(f, s.typed[f.name])
-  local pick = opts[math.max(1, math.min(s.pick or 1, #opts))]
+  local pick = opts[math.max(1, math.min(s.pick, #opts))]
   local cur = s.typed[f.name]
   if cur == nil then cur = f.value end
-  if pick and pick ~= cur then M.set_field(f.name, pick) end
   s.moved = false
+  if not pick or pick == cur then return false end
+  M.set_field(f.name, pick)
+  s.pick, s.moved = start_pick(s, f), false
+  render_form()
+  return true
+end
+
+-- take is <CR> in the form: the highlighted option, or a folder suggestion you moved to; false
+-- when there is nothing to take, and <CR> applies.
+function M.take()
+  local s = M.state
+  if not s then return false end
+  if M.take_option() then return true end
+  return s.smoved == true and M.accept_suggestion()
+end
+
+-- clear empties the focused field (<C-u>): its value and any option taken. An emptied field falls
+-- back to the cursor's or the starting value, as its note says.
+function M.clear()
+  local s = M.state
+  local f = s and s.focus and s.fields[s.focus]
+  if not f or f.kind == 'bool' then return end
+  M.set_field(f.name, '')
+  pcall(vim.api.nvim_win_set_cursor, s.win.form, { s.focus, 0 })
 end
 
 -- toggle flips the switch under the cursor. It is the only writer of a switch's typed value.
@@ -476,7 +519,7 @@ function M.on_form_changed()
   local shown = s.typed[f.name] ~= nil and s.typed[f.name] or (f.value or '')
   if lines[row] ~= shown then
     s.typed[f.name] = lines[row]
-    s.pick, s.moved = 1, true
+    filtered(s, lines[row])
     render_form()
     M.request_preview()
   else
@@ -490,8 +533,7 @@ function M.on_cursor_moved()
   if not s or not s.bufs or vim.api.nvim_get_current_win() ~= s.win.form then return end
   local row = vim.api.nvim_win_get_cursor(s.win.form)[1]
   if s.fields[row] and row ~= s.focus then
-    M.commit_option()
-    s.focus, s.moved = row, false
+    s.focus, s.moved, s.smoved = row, false, false
     s.pick = start_pick(s, s.fields[row])
     render_form()
     -- a switch row is toggled with <Space> in normal mode
@@ -506,13 +548,18 @@ function M.form_keys()
   local function map(lhs, fn) vim.keymap.set({ 'i', 'n' }, lhs, fn, { buffer = buf, nowait = true }) end
   map('<Tab>', M.focus_next)
   map('<S-Tab>', M.focus_prev)
-  map('<CR>', function() M.enter() end)
+  map('<CR>', function()
+    if not M.take() then M.enter() end
+  end)
+  -- <C-CR> applies even with an option highlighted; a terminal that cannot send it gets <CR>
+  -- twice: the first takes the option, the second applies
   map('<C-CR>', function() M.enter() end)
   map('<C-o>', function() M.review() end)
   map('<Esc>', function() M.close() end)
   map('<C-c>', function() M.close() end)
+  map('<C-u>', function() M.clear() end)
   map('<C-y>', function()
-    if M.accept_suggestion() then
+    if M.take_option() or M.accept_suggestion() then
       local row = M.state and M.state.focus
       if row then
         local line = vim.api.nvim_buf_get_lines(M.state.bufs.form, row - 1, row, false)[1] or ''
@@ -626,7 +673,6 @@ function M.enter(opts)
   local sel = M.selected()
   if not s or not sel then return end
   M.on_form_changed() -- a keystroke still unread counts
-  M.commit_option()
   if s.updating then return end
   if not s.ready then
     local row = form.first_invalid(s.fields)
@@ -646,7 +692,6 @@ function M.review()
   local sel = M.selected()
   if not s or not sel then return end
   M.on_form_changed() -- a keystroke still unread counts
-  M.commit_option()
   local planned = sets_payload(s, true)
   request(s.buf, 'alder/plan', params(s, { id = sel.id, sets = planned }), function(plan)
     local st = M.state

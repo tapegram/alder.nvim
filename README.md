@@ -207,12 +207,16 @@ built-in support.
 
 `<leader>ag` (or `:AlderGenerate`, or a generator from `gra`) opens the generator modal: a
 search line over the generators (those that apply at the cursor first), the chosen
-generator's form, and a live preview of the diff that updates as you type. `<Tab>` moves
-between fields. `<CR>` in the form applies when every field is valid (else it jumps to the first
+generator's form, and a live preview of the diff that updates as you type. `<Tab>` and
+`<S-Tab>` only move between fields: they never fill one in. A field with options (a table, a
+method) lists them under it, none highlighted until you press `<Up>`/`<Down>` or type to filter
+them; `<CR>` (or `<C-y>`) then takes the highlighted one, and `<C-u>` clears the field. The form's
+bottom border shows these keys. Otherwise `<CR>` in the form applies when every field is valid (else it jumps to the first
 that is not). `<CR>` in the search list jumps to the first required field still at its starting
 value instead of applying (so nothing is generated unseen); once none is, it applies like the
-form. `<C-CR>` applies at once from either place (same not-valid behaviour; some terminals
-cannot send `<C-CR>`, in which case use `<CR>` in the form), `<C-o>` opens the full review (what the plan leaves to you, file by file), `<Esc>`
+form. `<C-CR>` applies at once from either place, even with an option highlighted (same not-valid
+behaviour; some terminals cannot send `<C-CR>`: there `<CR>` in the form takes a highlighted
+option first and applies on the next press), `<C-o>` opens the full review (what the plan leaves to you, file by file), `<Esc>`
 closes. The form opens filled: the server starts each required field at an example (or at the
 first page or table when it must name one that exists), so the preview shows a change at once;
 type over the values. Each field's note says where its value came from and what the field
@@ -222,7 +226,7 @@ Flags that matter to agents rather than people (where `new action` puts its butt
 are left out of the form; `:Alder <words>` still takes them. A preset from `gra` focuses the
 first field still at its starting value. A module-name field shows where the name lands (`Sites.Clarity.Index → app/Sites/Clarity/Index.alder`)
 and suggests the existing folders under `app/` as dotted prefixes (`Sites.`, `Sites.Clarity.`);
-`<Up>`/`<Down>` pick one, `<C-y>` completes it. The modal needs [nui.nvim](https://github.com/MunifTanjim/nui.nvim); without it,
+`<Up>`/`<Down>` pick one, `<C-y>` (or `<CR>` once you have moved to one) completes it. The modal needs [nui.nvim](https://github.com/MunifTanjim/nui.nvim); without it,
 `<leader>ag` says so and `:Alder <words>` still runs the CLI. The server plans the change on a copy of
 your app, built from your buffers, and the plugin puts the result into **buffers**:
 

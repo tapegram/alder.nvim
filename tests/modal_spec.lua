@@ -242,7 +242,7 @@ test('modal: typing in the form buffer is a field edit; a joined line is put bac
   end)
 end)
 
-test('modal: a choice field lists options; Down picks, Tab commits; passing over it commits nothing', function()
+test('modal: a choice field lists options, none highlighted; Down highlights, <C-y> takes', function()
   sized(140, function()
     local _, s = opened_msg('remove route')
     modal.focus_field(1)
@@ -253,14 +253,93 @@ test('modal: a choice field lists options; Down picks, Tab commits; passing over
       if m[4].virt_lines then has_options = true end
     end
     assert(has_options, 'no options under the choice field')
-    -- an unmoved pick commits nothing, even when it is not the first option
-    modal.commit_option()
+    -- an unmoved highlight takes nothing
+    assert(not modal.take_option())
     assert(s.typed[f.name] == nil, vim.inspect(s.typed))
     local start = s.pick
     assert(modal.option(1))
-    assert(s.pick == start % #form_options(f, s) + 1, 'pick ' .. s.pick)
-    modal.commit_option()
-    assert(s.typed[f.name] == form_options(f, s)[s.pick], vim.inspect(s.typed))
+    assert(s.pick == (start and start % #form_options(f, s) + 1 or 1), 'pick ' .. tostring(s.pick))
+    local want = form_options(f, s)[s.pick]
+    local cur = f.value
+    assert(modal.take_option() == (want ~= cur))
+    if want ~= cur then assert(s.typed[f.name] == want, vim.inspect(s.typed)) end
+  end)
+end)
+
+-- route_field opens `new route` focused on its `list` field (a table choice, empty at first).
+local function route_field(name)
+  local buf = blog_buf('app/Posts/Index.alder')
+  local s = open(buf)
+  modal.type_query('new route')
+  wait_preview(s)
+  for i, f in ipairs(s.fields) do
+    if f.name == name then
+      modal.focus_field(i)
+      return s, i, f
+    end
+  end
+  error('new route has no ' .. name)
+end
+
+local function options_text(s)
+  local out = {}
+  for _, m in ipairs(vim.api.nvim_buf_get_extmarks(s.bufs.form, -1, 0, -1, { details = true })) do
+    for _, l in ipairs(m[4].virt_lines or {}) do
+      for _, c in ipairs(l) do out[#out + 1] = c[1] end
+    end
+  end
+  return table.concat(out, '\n')
+end
+
+test('modal: Tab past a choice field takes nothing, and nothing is highlighted (alder.nvim#13)', function()
+  sized(140, function()
+    local s, row = route_field('list')
+    assert(not options_text(s):find('▸', 1, true), 'an empty field shows a highlighted option:\n' .. options_text(s))
+    vim.api.nvim_feedkeys(vim.keycode('<Tab>'), 'x', false)
+    assert(s.focus == row + 1, 'focus ' .. tostring(s.focus))
+    vim.api.nvim_feedkeys(vim.keycode('<Tab>'), 'x', false)
+    assert(next(s.typed) == nil, vim.inspect(s.typed))
+  end)
+end)
+
+test('modal: a cleared choice field stays empty when Tab leaves it (alder.nvim#13)', function()
+  sized(140, function()
+    local s, row, f = route_field('list')
+    vim.api.nvim_buf_set_lines(s.bufs.form, row - 1, row, false, { 'Po' })
+    modal.on_form_changed()
+    assert(s.typed.list == 'Po' and s.pick == 1, vim.inspect(s.typed))
+    vim.api.nvim_buf_set_lines(s.bufs.form, row - 1, row, false, { '' })
+    modal.on_form_changed()
+    assert(s.pick == nil, 'an empty field keeps a highlight')
+    modal.focus_next()
+    assert(s.typed.list == '', 'Tab took an option into a cleared field: ' .. vim.inspect(s.typed))
+    -- a typed filter is left as typed: Tab does not swap it for the best match
+    modal.focus_field(row)
+    modal.set_field(f.name, 'Po')
+    modal.focus_next()
+    assert(s.typed.list == 'Po', vim.inspect(s.typed))
+  end)
+end)
+
+test('modal: <CR> takes a highlighted option, then applies; <C-u> clears (alder.nvim#13)', function()
+  sized(140, function()
+    local s, row, f = route_field('list')
+    local orig = modal.enter
+    local applied = 0
+    modal.enter = function() applied = applied + 1 end
+    local ok, err = pcall(function()
+      vim.api.nvim_feedkeys(vim.keycode('<Down>'), 'x', false)
+      assert(s.pick == 1, 'Down did not highlight the first option')
+      vim.api.nvim_feedkeys(vim.keycode('<CR>'), 'x', false)
+      assert(s.typed.list == f.choices[1] and applied == 0, vim.inspect({ typed = s.typed, applied = applied }))
+      vim.api.nvim_feedkeys(vim.keycode('<CR>'), 'x', false)
+      assert(applied == 1, 'the second <CR> did not apply')
+      modal.focus_field(row)
+      vim.api.nvim_feedkeys(vim.keycode('<C-u>'), 'x', false)
+      assert(s.typed.list == '' and s.pick == nil, vim.inspect(s.typed))
+    end)
+    modal.enter = orig
+    assert(ok, err)
   end)
 end)
 
