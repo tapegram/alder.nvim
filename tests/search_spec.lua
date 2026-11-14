@@ -448,3 +448,150 @@ test('search: a second open before the first reply wins', function()
     assert(text:find('Text.split', 1, true) and not text:find('Just', 1, true), text)
   end)
 end)
+
+-- cli runs f(e, log) with no language client and `alder` a fake script: body is its shell; each
+-- run appends its argv (one arg per line, then "--") to log.
+local function cli(e, body, f)
+  local config, lsp = require('alder.config'), require('alder.lsp')
+  local script, log = H.tmpdir() .. '/fake-alder', H.tmpdir() .. '/argv'
+  H.write(script, '#!/bin/sh\nprintf \'%s\\n\' "$@" >> ' .. log .. '\nprintf -- \'--\\n\' >> ' .. log .. '\n' .. body .. '\n')
+  vim.uv.fs_chmod(script, tonumber('755', 8))
+  local cmd = config.options.cmd
+  config.options.cmd = script
+  lsp.project_client = function() return nil end
+  local ok, err = pcall(f, function()
+    local fh = io.open(log)
+    local t = fh and fh:read('a') or ''
+    if fh then fh:close() end
+    return t
+  end)
+  config.options.cmd = cmd
+  assert(ok, err)
+end
+
+local CLI_SPLIT = [[echo '{"query":"split","mode":"name","note":"","results":[{"name":"split","module":"Text","kind":"function","signature":"Text -> Text -> List Text","doc":"","source":"stdlib"}]}']]
+
+test('search: no client falls back to the CLI', function()
+  local e = env({ lines = { 'x = ' }, cursor = { 1, 3 } })
+  e.run(function()
+    cli(e, CLI_SPLIT, function(argv)
+      search.open({})
+      assert(search.state, 'no picker without a client')
+      assert(search.HINT == HINT and H.float_text():find('Search by name', 1, true), H.float_text())
+      assert(argv() == '', 'the CLI ran for an empty query: ' .. argv())
+      search.state:set_query('split')
+      assert(H.wait(5000, function() return H.float_text():find('Text.split', 1, true) end), H.float_text())
+      assert(argv() == 'search\n--json\nsplit\n--\n', argv())
+      assert(#e.client.sent == 0)
+      search.state:confirm()
+      assert(line(e.buf, 1) == 'x = Text.split', line(e.buf, 1))
+    end)
+  end)
+end)
+
+test('search: a request error falls back, but not -32601', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    cli(e, CLI_SPLIT, function(argv)
+      e.client.answers['alder/search'] = function() return { code = -32603, message = 'boom' }, nil end
+      require('alder.lsp').project_client = function() return e.client end
+      search.open({ query = 'split' })
+      assert(H.wait(5000, function() return H.float_text():find('Text.split', 1, true) end), H.float_text())
+      assert(argv() == 'search\n--json\nsplit\n--\n', argv())
+      search.state:close()
+      e.client.answers['alder/search'] = function() return { code = -32601, message = 'unknown method' }, nil end
+      local before = argv()
+      local messages, restore = H.capture_notify()
+      search.open({ query = 'split' })
+      restore()
+      assert(argv() == before and not search.state, 'fell back on -32601: ' .. argv())
+      assert(#messages == 1 and messages[1].msg == OLD, vim.inspect(messages))
+    end)
+  end)
+end)
+
+test('search: an empty LSP list does not fall back', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    cli(e, CLI_SPLIT, function(argv)
+      require('alder.lsp').project_client = function() return e.client end
+      e.client.answers['alder/search'] = function(p) return nil, reply(p.query, {}) end
+      search.open({ query = 'nothing' })
+      H.wait(300, function() return false end)
+      assert(search.state and argv() == '', 'the CLI ran: ' .. argv())
+    end)
+  end)
+end)
+
+test('search: CLI rows jump with 1-based line and col', function()
+  local e = env({ lines = { 'x = 1' } })
+  local file = e.root .. '/app/Home.alder'
+  H.write(file, 'module Home\n\n  page = é 1\n')
+  e.run(function()
+    cli(e, [[echo '{"query":"page","mode":"name","note":"","results":[{"name":"page","module":"Home","kind":"value","signature":"Html Msg","doc":"","source":"app","file":"app/Home.alder","line":3,"col":3}]}']],
+      function()
+        search.open({ query = 'page' })
+        assert(H.wait(5000, function() return H.float_text():find('Home.page', 1, true) end), H.float_text())
+        vim.api.nvim_feedkeys(vim.keycode('<C-]>'), 'x', false)
+        H.wait(100, function() return false end)
+        assert(search.state == nil, 'picker still open')
+        assert(vim.api.nvim_buf_get_name(0) == file, vim.api.nvim_buf_get_name(0))
+        assert(vim.deep_equal(vim.api.nvim_win_get_cursor(0), { 3, 2 }), vim.inspect(vim.api.nvim_win_get_cursor(0)))
+      end)
+  end)
+end)
+
+test('search: a CLI without search gives the update message', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    cli(e, 'echo "usage: alder <command> [arguments]" >&2\nexit 2', function()
+      search.open({})
+      search.state:set_query('split')
+      assert(H.wait(5000, function() return H.float_text():find('this alder has no search', 1, true) end), H.float_text())
+      assert(H.float_text():find(OLD, 1, true) or H.float_text():find('update alder', 1, true), H.float_text())
+    end)
+  end)
+end)
+
+test('search: a flag-like query reaches the CLI as the query', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    cli(e, CLI_SPLIT, function(argv)
+      search.open({})
+      search.state:set_query('-x')
+      assert(H.wait(5000, function() return argv():find('-x', 1, true) end), argv())
+      assert(argv() == 'search\n--json\n-x\n--\n', argv())
+      search.state:set_query('-> Int')
+      assert(H.wait(5000, function() return argv():find('-> Int', 1, true) end), argv())
+      assert(argv() == 'search\n--json\n-x\n--\nsearch\n--json\n-> Int\n--\n', argv())
+    end)
+  end)
+end)
+
+test('search: a CLI query error is a note', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    cli(e, 'echo "alder search: not a complete type" >&2\nexit 2', function()
+      local messages, restore = H.capture_notify()
+      search.open({})
+      search.state:set_query('-> Int')
+      local ok = H.wait(5000, function() return H.float_text():find('not a complete type', 1, true) end)
+      restore()
+      assert(ok, H.float_text())
+      assert(not H.float_text():find('alder search: not', 1, true), 'the prefix stays')
+      assert(#messages == 0, vim.inspect(messages))
+    end)
+  end)
+end)
+
+test('search: no project root gives the project message', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    require('alder.project').root = function() return nil end
+    local messages, restore = H.capture_notify()
+    search.open({})
+    restore()
+    assert(#messages == 1 and messages[1].msg == require('alder.project').NOT_IN_PROJECT, vim.inspect(messages))
+    assert(not search.state)
+  end)
+end)

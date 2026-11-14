@@ -149,11 +149,51 @@ local function jump(r, enc)
   vim.cmd('normal! zv')
 end
 
+-- cli_rows reads `alder search --json`'s stdout into LSP-shaped rows: file absolute, lnum the
+-- 1-based line, col a 0-based byte column. nil when stdout is not a search reply.
+local function cli_rows(stdout, root)
+  local ok, v = pcall(vim.json.decode, stdout or '', { luanil = { object = true, array = true } })
+  if not ok or type(v) ~= 'table' or type(v.results) ~= 'table' then return nil end
+  for _, r in ipairs(v.results) do
+    if r.file then
+      r.file = root .. '/' .. r.file
+      r.lnum = r.line
+      r.col = math.max(0, (r.col or 1) - 1)
+    end
+  end
+  return v.results, note_of(v)
+end
+
+-- cli_fetch asks `alder search --json` (no server): done(items, note). The query goes as its
+-- own argument; alder search reads a flag-like one (-x) as the query.
+local function cli_fetch(root, q, done)
+  if q == '' then return done({}) end
+  local started = require('alder.cli').run({ 'search', '--json', q }, { cwd = root }, function(res)
+    local rows, note = cli_rows(res.stdout, root)
+    if rows then return done(rows, note) end
+    local err = vim.trim(res.stderr ~= '' and res.stderr or res.stdout)
+    if err:find('^usage: alder') or err:find('unknown command', 1, true) then return done({}, M.OLD) end
+    local msg = err:match('^alder search: ([^\n]*)')
+    if msg then return done({}, msg) end
+    vim.notify('alder search: ' .. err, vim.log.levels.ERROR)
+    done({})
+  end)
+  if not started then done({}, 'alder is not on PATH (:checkhealth alder)') end
+end
+
+-- jump_file opens a CLI result's declaration (file absolute, lnum 1-based, col 0-based bytes).
+local function jump_file(r)
+  vim.cmd.edit(vim.fn.fnameescape(r.file))
+  pcall(vim.api.nvim_win_set_cursor, 0, { r.lnum, r.col })
+  vim.cmd('normal! zv')
+end
+
 -- show opens the picker with the open request's reply: its query in the box and its results as
--- the starting list (the picker's first fetch hands them back instead of asking again).
-local function show(o, client, first)
-  local enc = client.offset_encoding or 'utf-16'
-  local start = { results(first), note_of(first) }
+-- the starting list (the picker's first fetch hands them back instead of asking again). With no
+-- client (first is nil) it searches through the CLI in root instead.
+local function show(o, client, first, root, query)
+  local enc = client and client.offset_encoding or 'utf-16'
+  local start = first and { results(first), note_of(first) }
   local jumping = false
   local function fetch(q, done)
     if start then
@@ -161,6 +201,7 @@ local function show(o, client, first)
       start = nil
       return done(s[1], s[2])
     end
+    if not client then return cli_fetch(root, q, done) end
     if q == '' then return done({}) end -- an empty box: the hint (the server has nothing for it)
     local sent = client:request('alder/search', { query = q, uri = o.doc and o.doc.uri }, function(err, reply)
       if err then
@@ -175,21 +216,24 @@ local function show(o, client, first)
   local p
   p = picker.open({
     title = 'Search',
-    query = (first and first.query) or '',
+    query = first and first.query or query or '',
     hint = M.HINT,
     source = { fetch = fetch },
     row = function(r) return M.label(r), r.signature end,
     detail = detail(pane_width()),
     on_pick = function(r)
-      if jumping then return jump(r, enc) end
-      if o.doc then return fill(o, client, r) end
+      if jumping then
+        if r.file then return jump_file(r) end
+        return jump(r, enc)
+      end
+      if o.doc and client then return fill(o, client, r) end
       insert_text(o, M.label(r))
     end,
     on_close = function() if M.state == p then M.state = nil end end,
     keys = {
       ['<C-]>'] = function(r, pk)
         if not r then return end
-        if not (r.uri and r.range) then
+        if not (r.file or (r.uri and r.range)) then
           return vim.notify('alder: the standard library has no source to open', vim.log.levels.INFO)
         end
         jumping = true
@@ -217,31 +261,36 @@ function M.open(opts)
   local o = { win = win, buf = buf, cursor = vim.api.nvim_win_get_cursor(win),
     insert = vim.api.nvim_get_mode().mode:find('^i') ~= nil }
   local lsp = require('alder.lsp')
-  local root = require('alder.project').root(buf)
-  local client = root and lsp.project_client(root, buf)
-  if not client then
-    -- the `alder search --json` fallback comes here
-    return vim.notify('alder: the language server is not running (:checkhealth alder)', vim.log.levels.WARN)
+  local root = require('alder.project').require_root(buf)
+  if not root then return end
+  local query = opts.query or ''
+  local client = lsp.project_client(root, buf)
+  -- no server, or its request failed (not as an old alder, not cancelled): the CLI answers
+  local function fallback()
+    if vim.api.nvim_win_is_valid(win) then show(o, nil, nil, root, query) end
   end
+  if not client then return fallback() end
   local enc = client.offset_encoding or 'utf-16'
   if vim.api.nvim_buf_get_name(buf):match('%.alder$') and lsp.client(buf) == client then
     local position = opts.at and opts.at.position
       or wire(buf, o.cursor[1] - 1, o.cursor[2], enc)
     o.doc = { uri = vim.uri_from_bufnr(buf), position = position }
   end
-  local query = opts.query or ''
   local params = { query = query }
   if o.doc then params.uri, params.position = o.doc.uri, o.doc.position end
   local sent = client:request('alder/search', params, function(err, reply)
     if n ~= opening then return end -- a later open replaced this one
-    if err then return complain(err) end
+    if err then
+      if err.code == METHOD_NOT_FOUND or err.code == CANCELLED then return complain(err) end
+      return fallback()
+    end
     reply = ui.plain(reply) or {}
     o.on_hole = o.doc ~= nil and query == '' and (reply.query or '') ~= ''
     -- the window may have gone while the request was out
     if not vim.api.nvim_win_is_valid(win) then return end
     show(o, client, reply)
   end, buf)
-  if sent == false then vim.notify('alder lsp stopped — :checkhealth alder', vim.log.levels.WARN) end
+  if sent == false then fallback() end
 end
 
 return M
