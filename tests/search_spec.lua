@@ -611,3 +611,18 @@ test("search: the CLI's own search usage is a note, not the update message", fun
     end)
   end)
 end)
+
+test('search: opened at a position, Enter uses that position even with no hole there', function()
+  local e = env({ lines = { 'x = 1', 'y = 2' }, cursor = { 2, 0 } })
+  e.run(function()
+    e.client.answers['alder/search'] = function() return nil, reply('', {}) end
+    e.client.answers['alder/searchEdit'] = edit_at(e, 'Text.split')
+    search.open({ at = { buf = e.buf, position = { line = 0, character = 5 } } })
+    search.state:set_query('split')
+    assert(H.wait(1000, function() return #sent(e, 'alder/search') == 2 end), 'no request')
+    e.client:reply(2, nil, reply('split', { split }))
+    search.state:confirm()
+    local s = sent(e, 'alder/searchEdit')[1]
+    assert(s and vim.deep_equal(s.params.position, { line = 0, character = 5 }), vim.inspect(s and s.params))
+  end)
+end)

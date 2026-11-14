@@ -121,7 +121,9 @@ local function fill(o, client, r)
   end
   local enc = client.offset_encoding or 'utf-16'
   local position = doc.position
-  if not o.on_hole then
+  if o.at then
+    position = o.at -- opened at a position (the code action): Enter uses it, hole or not
+  elseif not o.on_hole then
     local row, col = o.cursor[1] - 1, o.cursor[2]
     if not o.insert then col = after(o.buf, row, col) end
     position = wire(o.buf, row, col, enc)
@@ -259,7 +261,7 @@ function M.open(opts)
   local win = vim.api.nvim_get_current_win()
   local buf = (opts.at and opts.at.buf) or vim.api.nvim_get_current_buf()
   local o = { win = win, buf = buf, cursor = vim.api.nvim_win_get_cursor(win),
-    insert = vim.api.nvim_get_mode().mode:find('^i') ~= nil }
+    insert = vim.api.nvim_get_mode().mode:find('^i') ~= nil, at = opts.at and opts.at.position }
   local lsp = require('alder.lsp')
   local root = require('alder.project').require_root(buf)
   if not root then return end

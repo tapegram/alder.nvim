@@ -135,3 +135,106 @@ test('lsp: opts.semantic_tokens = true keeps the server tokens', function()
   require('alder.config').options = saved
   assert(ok, err)
 end)
+
+-- search_buf opens a blog module and appends a signature a and a definition b (a typed hole); returns buf and b's 0-based row.
+local function search_buf(a, b)
+  local root = blog()
+  vim.cmd.edit(root .. '/app/Posts/Index.alder')
+  local buf = vim.api.nvim_get_current_buf()
+  assert(attached(buf))
+  local n = vim.api.nvim_buf_line_count(buf)
+  vim.api.nvim_buf_set_lines(buf, n, n, false, { '', a, b })
+  return buf, n + 2 -- 0-based row of the hole line b
+end
+
+local function wait_picker()
+  local search = require('alder.search')
+  assert(H.wait(8000, function() return search.state ~= nil end), 'picker did not open')
+  return search.state
+end
+
+test('lsp: initialize declares experimental.alderSearch', function()
+  local root = blog()
+  vim.cmd.edit(root .. '/app/Posts/Index.alder')
+  local buf = vim.api.nvim_get_current_buf()
+  assert(attached(buf))
+  local c = require('alder.lsp').client(buf)
+  assert(c.config.capabilities.experimental.alderSearch == true, vim.inspect(c.config.capabilities.experimental))
+end)
+
+test('lsp: search finds Text.split by type', function()
+  local root = blog()
+  vim.cmd.edit(root .. '/app/Posts/Index.alder')
+  local buf = vim.api.nvim_get_current_buf()
+  assert(attached(buf))
+  local res, found
+  H.wait(10000, function() -- the server answers once its first analysis has landed
+    res = vim.lsp.buf_request_sync(buf, 'alder/search', { query = 'Text -> Text -> List Text', uri = vim.uri_from_bufnr(buf) }, 3000)
+    for _, r in pairs(res or {}) do
+      for _, hit in ipairs(r.result and r.result.results or {}) do
+        if hit.module == 'Text' and hit.name == 'split' then found = true end
+      end
+    end
+    return found
+  end)
+  assert(found, vim.inspect(res))
+end)
+
+test('lsp: search on a hole fills it and lands on the new hole', function()
+  local buf, row = search_buf('holeTest : List Text', 'holeTest = ?h')
+  vim.api.nvim_win_set_cursor(0, { row + 1, 11 }) -- on the ?
+  -- the server must have analysed the edit (a hole prefill): ask until it answers one
+  local ready = H.wait(10000, function()
+    local r = vim.lsp.buf_request_sync(buf, 'alder/search', { query = '', uri = vim.uri_from_bufnr(buf),
+      position = { line = row, character = 11 } }, 3000)
+    for _, v in pairs(r or {}) do if v.result and (v.result.query or '') ~= '' then return true end end
+  end)
+  assert(ready, 'the server never saw the hole')
+  require('alder.search').open({})
+  local p = wait_picker()
+  assert((p.query or ''):find('List Text', 1, true), 'no hole prefill: ' .. tostring(p.query))
+  -- the prefilled list: pick Text.lines, which takes an argument, so the fill leaves a new hole
+  local idx
+  assert(H.wait(8000, function()
+    for i, it in ipairs(p.filtered or {}) do if it.module == 'Text' and it.name == 'lines' then idx = i end end
+    return idx
+  end), 'Text.lines not listed')
+  p:move(idx - p.sel)
+  p:confirm()
+  local function text() return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n') end
+  assert(H.wait(8000, function() return text():find('holeTest = Text.lines ?', 1, true) end), text():sub(-200))
+  local l = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+  assert(l:find('^holeTest = Text.lines %?'), l)
+  assert(H.wait(2000, function()
+    local cur = vim.api.nvim_win_get_cursor(0)
+    return cur[1] == row + 1 and l:sub(cur[2] + 1, cur[2] + 1) == '?'
+  end), 'the cursor is not on the new hole: ' .. vim.inspect(vim.api.nvim_win_get_cursor(0)) .. ' ' .. l)
+end)
+
+test('lsp: the code action Search for opens the picker at the hole', function()
+  local buf, row = search_buf('holeAct : List Text', 'holeAct = ?h')
+  local origin = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_cursor(origin, { 1, 0 })
+  local pos = { line = row, character = 10 }
+  local action, res
+  H.wait(10000, function() -- once the server has analysed the edited buffer
+    res = vim.lsp.buf_request_sync(buf, 'textDocument/codeAction', {
+      textDocument = { uri = vim.uri_from_bufnr(buf) },
+      range = { start = pos, ['end'] = pos },
+      context = { diagnostics = {} },
+    }, 3000)
+    for _, r in pairs(res or {}) do
+      for _, a in ipairs(r.result or {}) do
+        if a.title:find('^Search for') then action = a end
+      end
+    end
+    return action
+  end)
+  assert(action, 'no Search for action: ' .. vim.inspect(res))
+  assert(action.command and action.command.command == 'alder.search', vim.inspect(action))
+  local c = require('alder.lsp').client(buf)
+  c:exec_cmd(action.command, { bufnr = buf })
+  local p = wait_picker()
+  assert(vim.deep_equal(vim.api.nvim_win_get_cursor(origin), { 1, 0 }), 'the cursor moved')
+  assert((p.query or ''):find('List Text', 1, true), 'no hole prefill: ' .. tostring(p.query))
+end)
