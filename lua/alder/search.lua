@@ -172,8 +172,8 @@ local function cli_fetch(root, q, done)
     local rows, note = cli_rows(res.stdout, root)
     if rows then return done(rows, note) end
     local err = vim.trim(res.stderr ~= '' and res.stderr or res.stdout)
-    if err:find('^usage: alder') or err:find('unknown command', 1, true) then return done({}, M.OLD) end
-    local msg = err:match('^alder search: ([^\n]*)')
+    if (err:find('^usage: alder') and not err:find('^usage: alder search')) or err:find('unknown command', 1, true) then return done({}, M.OLD) end
+    local msg = err:match('^alder search: ([^\n]*)') or err:match('^(usage: alder search[^\n]*)')
     if msg then return done({}, msg) end
     vim.notify('alder search: ' .. err, vim.log.levels.ERROR)
     done({})
