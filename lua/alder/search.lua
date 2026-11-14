@@ -203,9 +203,15 @@ end
 
 -- open opens the picker. opts.query is the starting text; opts.at = {buf, position} opens it at
 -- that position (the hole of the "Search for" code action) instead of the cursor's.
+-- opening counts the opens: only the latest open's reply opens a picker (a second press of the
+-- key before the first reply arrives must not open two, each closing the other).
+local opening = 0
+
 function M.open(opts)
   opts = opts or {}
   if M.state then M.state:close() end
+  opening = opening + 1
+  local n = opening
   local win = vim.api.nvim_get_current_win()
   local buf = (opts.at and opts.at.buf) or vim.api.nvim_get_current_buf()
   local o = { win = win, buf = buf, cursor = vim.api.nvim_win_get_cursor(win),
@@ -227,6 +233,7 @@ function M.open(opts)
   local params = { query = query }
   if o.doc then params.uri, params.position = o.doc.uri, o.doc.position end
   local sent = client:request('alder/search', params, function(err, reply)
+    if n ~= opening then return end -- a later open replaced this one
     if err then return complain(err) end
     reply = ui.plain(reply) or {}
     o.on_hole = o.doc ~= nil and query == '' and (reply.query or '') ~= ''

@@ -427,3 +427,24 @@ test('search: opts.at opens at the hole and leaves the cursor until a pick', fun
     assert(vim.deep_equal(vim.api.nvim_win_get_cursor(e.win), { 1, 0 }))
   end)
 end)
+
+test('search: a second open before the first reply wins', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    search.open({ query = 'first' })
+    search.open({ query = 'second' })
+    assert(#sent(e, 'alder/search') == 2, vim.inspect(e.client.sent))
+    e.client:reply(2, nil, reply('second', { split }))
+    e.client:reply(1, nil, reply('first', { just }))
+    H.wait(100, function() return false end)
+    local floats = 0
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_get_config(w).relative ~= '' then floats = floats + 1 end
+    end
+    assert(search.state and search.state.query == 'second', search.state and search.state.query)
+    assert(floats == 3, 'one picker (query, list, detail) expected, floats: ' .. floats)
+    assert(vim.api.nvim_get_current_win() == search.state.search_win, 'the picker lost focus')
+    local text = H.float_text()
+    assert(text:find('Text.split', 1, true) and not text:find('Just', 1, true), text)
+  end)
+end)
