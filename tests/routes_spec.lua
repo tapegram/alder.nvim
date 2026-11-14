@@ -197,3 +197,18 @@ test('routes: a PATCH route shows PATCH (CLI and LSP), and kind is the fallback 
   local lines = routes.lines(cli)
   assert(lines[1]:find('^PATCH /sites/:id  '), lines[1])
 end)
+
+test('routes: jump within the current modified buffer does not raise E37', function()
+  local root = project()
+  local file = root .. '/app/Sites/Clarity/Index.alder'
+  vim.cmd.edit(vim.fn.fnameescape(file))
+  local buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { 'module Sites.Clarity.Index ' })
+  assert(vim.bo[buf].modified)
+  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  local ok, err = pcall(routes.jump, { file = file, lnum = 3, col = 0 })
+  local at = vim.api.nvim_win_get_cursor(0)
+  vim.bo[buf].modified = false
+  assert(ok, err)
+  assert(vim.api.nvim_get_current_buf() == buf and at[1] == 3, vim.inspect(at))
+end)

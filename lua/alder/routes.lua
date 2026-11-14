@@ -107,11 +107,7 @@ function M.move(delta)
 end
 
 -- jump opens the route's declaration.
-function M.jump(r)
-  vim.cmd.edit(vim.fn.fnameescape(r.file))
-  pcall(vim.api.nvim_win_set_cursor, 0, { r.lnum, r.col })
-  vim.cmd('normal! zv')
-end
+function M.jump(r) picker.goto_file(r.file, r.lnum, r.col) end
 
 function M.confirm()
   if M.state then M.state:confirm() end

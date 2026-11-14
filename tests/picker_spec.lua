@@ -173,3 +173,18 @@ test('picker: extra keys get the selected item', function()
   p:close()
   assert(ok, err)
 end)
+
+test('picker: a throwing on_pick is reported and the picker still settles', function()
+  local p = picker.open({ title = 'Fruit', row = row, source = { items = fruits },
+    on_pick = function() error('boom') end })
+  local settled = false
+  p.settle = function() settled = true end
+  local messages, restore = H.capture_notify()
+  local ok, err = pcall(function() p:confirm() end)
+  restore()
+  p:close()
+  assert(ok, err)
+  assert(settled, 'settle not run')
+  assert(#messages == 1 and messages[1].msg:find('boom', 1, true) and messages[1].level == vim.log.levels.ERROR,
+    vim.inspect(messages))
+end)

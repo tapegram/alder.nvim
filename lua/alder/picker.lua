@@ -42,13 +42,31 @@ function M.lines(items, grouped)
   return lines, marks, headings
 end
 
+-- goto_file puts the cursor at lnum (1-based) / col (0-based byte) of file in the current window.
+-- A file already loaded is switched to, never `:edit`ed: that raises E37 on the current buffer
+-- when it has unsaved changes.
+function M.goto_file(file, lnum, col)
+  local buf
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(b) and vim.api.nvim_buf_get_name(b) == file then buf = b break end
+  end
+  if buf then
+    if vim.api.nvim_get_current_buf() ~= buf then vim.api.nvim_win_set_buf(0, buf) end
+  else
+    vim.cmd.edit(vim.fn.fnameescape(file))
+  end
+  pcall(vim.api.nvim_win_set_cursor, 0, { lnum, col })
+  vim.cmd('normal! zv')
+end
+
 -- ── The window ───────────────────────────────────────────────────────────────
 -- open(opts) -> picker. opts:
 --   title      the query window's title
 --   query      the starting text (the cursor goes at its end)
 --   hint       a dim line in the list area while the query is empty and there are no items
 --   source     { items = list, filter = fn(items, q) } (local), or { fetch = fn(q, done) }
---              (async: done(items, note); the picker debounces and drops a stale done)
+--              (async: done(items, note), and stale() -> true once the
+--              answer no longer counts; the picker debounces and drops a stale done)
 --   row(item)  -> label, signature: the list's two columns, cut with … to the window
 --   detail(item) -> lines, marks, or nil for no detail pane; a mark is
 --              { row (1-based), col (0-based byte), end_col (nil: the line's end), hl }
@@ -134,7 +152,7 @@ function Picker:render()
     note_on_rule = self.note
   else
     self.sel = 1
-    local dim = self.note or ((self.query == '' and self.hint) or nil)
+    local dim = self.note or (self.query == '' and self.hint) or (not self.busy and 'no results') or nil
     set_lines(buf, { dim and cut(dim, self.width) or '' })
     if dim then vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, { line_hl_group = 'Comment' }) end
   end
@@ -146,6 +164,7 @@ function Picker:render()
     if it then lines, marks = self.detail(it) end
     lines = lines or {}
     set_lines(self.detail_buf, lines)
+    self:fit_detail()
     vim.api.nvim_buf_clear_namespace(self.detail_buf, ns, 0, -1)
     for _, m in ipairs(marks or {}) do
       local text = lines[m.row]
@@ -161,6 +180,26 @@ function Picker:render()
   pcall(vim.api.nvim_win_set_config, self.detail_win or self.list_win, { footer = footer, footer_pos = 'right' })
 end
 
+-- fit_detail sizes the detail pane to its (wrapped) content, up to the room left on screen, and
+-- scrolls it back to the top; what still does not fit is reached with scroll_detail.
+function Picker:fit_detail()
+  local w = self.detail_win
+  if not valid(w) then return end
+  local ok, h = pcall(vim.api.nvim_win_text_height, w, {})
+  if not ok then return end
+  local need = math.max(1, h.all)
+  pcall(vim.api.nvim_win_set_height, w, math.max(1, math.min(need, self.detail_max)))
+  pcall(vim.api.nvim_win_call, w, function() vim.fn.winrestview({ topline = 1, lnum = 1 }) end)
+end
+
+-- scroll_detail scrolls the detail pane a page down (dir 1) or up (dir -1).
+function Picker:scroll_detail(dir)
+  if self.closed or not valid(self.detail_win) then return end
+  pcall(vim.api.nvim_win_call, self.detail_win, function()
+    vim.cmd('normal! ' .. vim.keycode(dir > 0 and '<C-f>' or '<C-b>'))
+  end)
+end
+
 -- invalidate drops every fetch in flight or waiting: its answer no longer counts.
 local function invalidate(self)
   seq_counter = seq_counter + 1
@@ -174,6 +213,7 @@ function Picker:fetch()
   invalidate(self)
   local n = self.seq
   self:set_busy(true)
+  local function stale() return self.closed or n ~= self.seq end
   self.source.fetch(self.query, function(items, note)
     local function apply()
       if self.closed or n ~= self.seq then return end
@@ -181,7 +221,7 @@ function Picker:fetch()
       self:set_items(items or {}, note)
     end
     if vim.in_fast_event() then vim.schedule(apply) else apply() end
-  end)
+  end, stale)
 end
 
 function Picker:set_query(q)
@@ -275,7 +315,10 @@ function Picker:confirm()
   local it = self:selected()
   self.picking = true
   self:close()
-  if it and self.on_pick then self.on_pick(it) end
+  if it and self.on_pick then
+    local ok, err = pcall(self.on_pick, it)
+    if not ok then vim.notify('alder: ' .. tostring(err), vim.log.levels.ERROR) end
+  end
   self:settle()
 end
 
@@ -312,6 +355,8 @@ function M.open(opts)
   local total = fixed + list_h
   local col = math.floor((vim.o.columns - width) / 2)
   local row = math.max(1, math.floor((vim.o.lines - total - 2) / 2))
+  -- the detail pane grows downwards to the screen's last row above the command line
+  self.detail_max = math.max(detail_h, vim.o.lines - vim.o.cmdheight - (row + 4 + list_h) - 1)
   local function float(buf, enter, r, h, b)
     return vim.api.nvim_open_win(buf, enter, { relative = 'editor', row = r, col = col, width = width, height = h,
       style = 'minimal', border = b, zindex = 50 })
@@ -347,6 +392,10 @@ function M.open(opts)
   map('<C-n>', function() self:move(1) end)
   map('<Up>', function() self:move(-1) end)
   map('<C-p>', function() self:move(-1) end)
+  if opts.detail then
+    map('<C-f>', function() self:scroll_detail(1) end)
+    map('<C-b>', function() self:scroll_detail(-1) end)
+  end
   for lhs, fn in pairs(opts.keys or {}) do
     map(lhs, function() fn(self:selected(), self) end)
   end

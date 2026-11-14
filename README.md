@@ -259,7 +259,8 @@ to run while an `.alder` buffer of the app has unsaved changes: `:wall` first.
 
 `<leader>af` (or `:AlderSearch [query]`) opens a picker over the standard library and your app's
 functions. Type a name (`split`), a module (`Text.`) or a type (`Text -> Int`, `: List Text`); the
-detail pane shows the whole signature and doc. `<CR>` inserts the result after the cursor, or, when
+detail pane shows the whole signature and doc (`<C-f>` / `<C-b>` scroll it when it is taller
+than the screen). `<CR>` inserts the result after the cursor, or, when
 the cursor is on a typed hole, opens with `: <the hole's type>` and fills the hole, leaving the
 cursor on the first new hole so fills chain. `<C-]>` jumps to an app result's declaration. On a
 hole, `gra` also offers `Search for <type>`, which opens the picker at that hole. This needs an

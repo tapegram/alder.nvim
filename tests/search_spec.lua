@@ -626,3 +626,118 @@ test('search: opened at a position, Enter uses that position even with no hole t
     assert(s and vim.deep_equal(s.params.position, { line = 0, character = 5 }), vim.inspect(s and s.params))
   end)
 end)
+
+test('search: C-] jumps within the current modified buffer (no E37)', function()
+  local e = env({ lines = { 'module Main', '', '  helper = 1', 'x = 2' }, cursor = { 4, 0 } })
+  e.run(function()
+    vim.api.nvim_buf_set_name(e.buf, e.root .. '/app/Main.alder')
+    vim.bo[e.buf].modified = true
+    local here = { name = 'helper', module = 'Main', kind = 'value', signature = 'Int', doc = '', source = 'app',
+      uri = e.uri, range = { start = { line = 2, character = 2 }, ['end'] = { line = 2, character = 8 } } }
+    e.client.answers['alder/search'] = function(p)
+      if p.query == '' then return nil, reply('', {}) end
+      return nil, reply(p.query, { here })
+    end
+    search.open({ query = 'helper' })
+    assert(H.float_text():find('Main.helper', 1, true), H.float_text())
+    local ok, err = pcall(vim.api.nvim_feedkeys, vim.keycode('<C-]>'), 'x', false)
+    assert(ok, err)
+    H.wait(100, function() return false end)
+    assert(vim.api.nvim_get_current_buf() == e.buf)
+    assert(vim.deep_equal(vim.api.nvim_win_get_cursor(0), { 3, 2 }), vim.inspect(vim.api.nvim_win_get_cursor(0)))
+  end)
+end)
+
+test('search: a CLI row jumps within the current modified buffer (no E37)', function()
+  local e = env({ lines = { 'module Main', '', '  helper = 1', 'x = 2' }, cursor = { 4, 0 } })
+  e.run(function()
+    local file = e.root .. '/app/Main.alder'
+    H.write(file, 'module Main\n\n  helper = 1\nx = 2\n')
+    vim.bo[e.buf].modified = true -- the env's buffer is already named `file`
+    cli(e, [[echo '{"query":"helper","mode":"name","note":"","results":[{"name":"helper","module":"Main","kind":"value","signature":"Int","doc":"","source":"app","file":"app/Main.alder","line":3,"col":3}]}']],
+      function()
+        search.open({ query = 'helper' })
+        assert(H.wait(5000, function() return H.float_text():find('Main.helper', 1, true) end), H.float_text())
+        local ok, err = pcall(vim.api.nvim_feedkeys, vim.keycode('<C-]>'), 'x', false)
+        assert(ok, err)
+        H.wait(100, function() return false end)
+        assert(vim.api.nvim_get_current_buf() == e.buf)
+        assert(vim.deep_equal(vim.api.nvim_win_get_cursor(0), { 3, 2 }), vim.inspect(vim.api.nvim_win_get_cursor(0)))
+        assert(vim.bo[e.buf].modified, 'the buffer lost its changes')
+      end)
+  end)
+end)
+
+test('search: the detail pane fits a long doc at 80 columns', function()
+  local doc = ('Splits a text wherever the separator appears and returns every piece, in order, without the '
+    .. 'separator itself; an empty text gives a list with one empty text, and a separator that is empty splits '
+    .. 'between every character of the text given here, so that ' .. 'a caller can rely on it.')
+  assert(#doc > 270, #doc)
+  local long = vim.tbl_extend('force', split, { doc = doc })
+  local e = env({ lines = { 'x = 1' } })
+  local cols, rows = vim.o.columns, vim.o.lines
+  vim.o.columns, vim.o.lines = 80, 40
+  e.run(function()
+    e.client.answers['alder/search'] = function(p) return nil, reply(p.query, { long }) end
+    search.open({ query = 'split' })
+    local p = search.state
+    local buf = vim.api.nvim_win_get_buf(p.detail_win)
+    assert(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), ' '):find('between every character', 1, true))
+    local need = vim.api.nvim_win_text_height(p.detail_win, {}).all
+    local have = vim.api.nvim_win_get_height(p.detail_win)
+    vim.o.columns, vim.o.lines = cols, rows
+    assert(have >= need and need > 6, ('pane %d rows, content %d'):format(have, need))
+  end)
+  vim.o.columns, vim.o.lines = cols, rows
+end)
+
+test('search: a detail pane taller than the screen scrolls with C-f / C-b', function()
+  local doc = {}
+  for i = 1, 60 do doc[i] = 'line ' .. i end
+  local long = vim.tbl_extend('force', split, { doc = table.concat(doc, '\n') })
+  local e = env({ lines = { 'x = 1' } })
+  local cols, rows = vim.o.columns, vim.o.lines
+  vim.o.columns, vim.o.lines = 80, 30
+  e.run(function()
+    e.client.answers['alder/search'] = function(p) return nil, reply(p.query, { long }) end
+    search.open({ query = 'split' })
+    local w = search.state.detail_win
+    local function top() return vim.api.nvim_win_call(w, function() return vim.fn.line('w0') end) end
+    assert(top() == 1)
+    vim.api.nvim_feedkeys(vim.keycode('<C-f>'), 'x', false)
+    local down = top()
+    assert(down > 1, 'C-f did not scroll: ' .. down)
+    vim.api.nvim_feedkeys(vim.keycode('<C-b>'), 'x', false)
+    assert(top() < down, 'C-b did not scroll back')
+    assert(search.state, 'the picker closed')
+  end)
+  vim.o.columns, vim.o.lines = cols, rows
+end)
+
+test('search: a query with no results says so', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    e.client.answers['alder/search'] = function(p) return nil, reply(p.query, {}) end
+    search.open({ query = 'zzzz' })
+    local text = H.float_text()
+    assert(text:find('no results', 1, true), text)
+  end)
+end)
+
+test('search: a superseded CLI failure never notifies', function()
+  local e = env({ lines = { 'x = 1' } })
+  e.run(function()
+    cli(e, 'if [ "$3" = x ]; then sleep 0.4; echo kaboom >&2; exit 1; fi\n' .. CLI_SPLIT, function()
+      local messages, restore = H.capture_notify()
+      local ok, err = pcall(function()
+        search.open({ query = 'x' })
+        search.state:set_query('split')
+        assert(H.wait(5000, function() return H.float_text():find('Text.split', 1, true) end), H.float_text())
+        H.wait(800, function() return false end)
+      end)
+      restore()
+      assert(ok, err)
+      assert(#messages == 0, vim.inspect(messages))
+    end)
+  end)
+end)

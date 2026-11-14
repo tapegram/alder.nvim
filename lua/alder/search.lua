@@ -144,10 +144,9 @@ local function fill(o, client, r)
 end
 
 -- jump opens an app result's declaration.
+-- (show_document switches buffers without `:edit`, which raises E37 on a modified current one.)
 local function jump(r, enc)
-  vim.cmd.edit(vim.fn.fnameescape(vim.uri_to_fname(r.uri)))
-  local buf = vim.api.nvim_get_current_buf()
-  pcall(vim.api.nvim_win_set_cursor, 0, { r.range.start.line + 1, byte(buf, r.range.start, enc) })
+  vim.lsp.util.show_document({ uri = r.uri, range = r.range }, enc, { focus = true })
   vim.cmd('normal! zv')
 end
 
@@ -168,7 +167,7 @@ end
 
 -- cli_fetch asks `alder search --json` (no server): done(items, note). The query goes as its
 -- own argument; alder search reads a flag-like one (-x) as the query.
-local function cli_fetch(root, q, done)
+local function cli_fetch(root, q, done, stale)
   if q == '' then return done({}) end
   local started = require('alder.cli').run({ 'search', '--json', q }, { cwd = root }, function(res)
     local rows, note = cli_rows(res.stdout, root)
@@ -177,6 +176,7 @@ local function cli_fetch(root, q, done)
     if (err:find('^usage: alder') and not err:find('^usage: alder search')) or err:find('unknown command', 1, true) then return done({}, M.OLD) end
     local msg = err:match('^alder search: ([^\n]*)') or err:match('^(usage: alder search[^\n]*)')
     if msg then return done({}, msg) end
+    if stale and stale() then return end -- a superseded keystroke never notifies
     vim.notify('alder search: ' .. err, vim.log.levels.ERROR)
     done({})
   end)
@@ -184,11 +184,7 @@ local function cli_fetch(root, q, done)
 end
 
 -- jump_file opens a CLI result's declaration (file absolute, lnum 1-based, col 0-based bytes).
-local function jump_file(r)
-  vim.cmd.edit(vim.fn.fnameescape(r.file))
-  pcall(vim.api.nvim_win_set_cursor, 0, { r.lnum, r.col })
-  vim.cmd('normal! zv')
-end
+local function jump_file(r) picker.goto_file(r.file, r.lnum, r.col) end
 
 -- show opens the picker with the open request's reply: its query in the box and its results as
 -- the starting list (the picker's first fetch hands them back instead of asking again). With no
@@ -197,13 +193,13 @@ local function show(o, client, first, root, query)
   local enc = client and client.offset_encoding or 'utf-16'
   local start = first and { results(first), note_of(first) }
   local jumping = false
-  local function fetch(q, done)
+  local function fetch(q, done, stale)
     if start then
       local s = start
       start = nil
       return done(s[1], s[2])
     end
-    if not client then return cli_fetch(root, q, done) end
+    if not client then return cli_fetch(root, q, done, stale) end
     if q == '' then return done({}) end -- an empty box: the hint (the server has nothing for it)
     local sent = client:request('alder/search', { query = q, uri = o.doc and o.doc.uri }, function(err, reply)
       if err then
