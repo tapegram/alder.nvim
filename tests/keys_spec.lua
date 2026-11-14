@@ -100,6 +100,16 @@ test('keys: false disables the routes picker', function()
   assert(gmapped('<leader>au'), 'restored')
 end)
 
+test('keys: <leader>af is the search picker, global; false maps nothing', function()
+  vim.g.mapleader = ' '
+  assert(gmapped('<leader>af'))
+  with_opts({ keys = { search = false } }, function()
+    assert(not gmapped('<leader>af'))
+    assert(gmapped('<leader>au'))
+  end)
+  assert(gmapped('<leader>af'), 'restored')
+end)
+
 test('keys: project maps work in a non-alder buffer inside a project; buffer maps do not', function()
   vim.g.mapleader = ' '
   local dst = H.tmpdir() .. '/blog'

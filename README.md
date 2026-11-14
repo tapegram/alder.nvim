@@ -65,7 +65,7 @@ require('alder').setup({
   preview = true,       -- the `:Alder` CLI path shows the diff first; <CR> applies, q discards (not the modal)
   lsp = true,           -- start `alder lsp` for .alder buffers; false keeps CLI mode
   semantic_tokens = false, -- colour from the server's semantic tokens too; false keeps tree-sitter's
-  keys = {              -- each can be false; generate/run/test/scratch/routes are global (see Keys)
+  keys = {              -- each can be false; generate/test/scratch/routes/search are global (see Keys)
     generate = '<leader>ag',
     diagnostics = '<leader>ac',
     explain = '<leader>ae',
@@ -74,6 +74,7 @@ require('alder').setup({
     mutate = '<leader>am',
     scratch = '<leader>ax',
     routes = '<leader>au',
+    search = '<leader>af',
     send = '<leader>as',
     scratch_value = '<leader>ao',
   },
@@ -101,6 +102,7 @@ run so the grammar matches your compiler.
 | `:AlderTest [args]` | `alder test`: failures land in the quickfix list at their `test` line, compile errors as diagnostics |
 | `:AlderMutate [args]` | `alder test --mutate` in the background: the survivors land in the quickfix list at the mutated expression, `before → after` |
 | `:AlderRoutes` | the app's routes in a fuzzy picker (filter on the path); select one to jump to its declaration |
+| `:AlderSearch [query]` | the search picker (`<leader>af`): find a function by name or type, insert it or fill the hole under the cursor; `query` is the starting text |
 | `:AlderScratch` | open `scratch.alder` at the app root (created from a template); each `> expr` line shows its value |
 | `:AlderRepl` | deprecated: `alder repl --in <this module>` in a split; use `:AlderScratch` |
 | `:Alder <args…>` | any `alder` command, with completion; it writes to disk through the CLI |
@@ -122,7 +124,7 @@ buffer's file or the cwd is inside an Alder project (an `app/` directory above i
 they say `alder: not in an Alder project`. The **buffer-only** maps exist only in `.alder` buffers.
 
 Project-level (global): `<leader>ag` (generator modal; from a non-`.alder` buffer it opens the app's
-`app/App.alder` first), `<leader>at` (test), `<leader>ax` (scratch file), `<leader>au` (routes).
+`app/App.alder` first), `<leader>at` (test), `<leader>ax` (scratch file), `<leader>au` (routes), `<leader>af` (search).
 
 Run the app from a terminal (`alder run`), not from the editor: a server started in an editor
 terminal is not tracked, so closing its window leaves it running with no way to reach it again.
@@ -141,6 +143,7 @@ All of them:
 | `<leader>am` | `alder test --mutate` in the background; the survivors land in the quickfix list at the mutated expression, `before → after` |
 | `<leader>ax` | open `scratch.alder` at the app root |
 | `<leader>au` | the routes picker (`:AlderRoutes`): `GET /sites/:id  Sites.Clarity.Index.page` (`POST` for a msg), fuzzy-filtered on the path, `<CR>` jumps to the declaration; asks the language server (`alder/routes`), else runs `alder routes --json` |
+| `<leader>af` | the search picker (`:AlderSearch`): find a function by name or type; `<CR>` inserts it, or fills the typed hole under the cursor |
 | `<leader>as` | send the current line (normal mode) or the selection (visual mode) to `scratch.alder` and save it: a definition (`f x = …`, `name : T`, `type …`) is added as written, an expression as a `> ` watch |
 | `<leader>ao` | in `scratch.alder`: open the full value under the cursor in a float |
 
@@ -251,6 +254,18 @@ your app, built from your buffers, and the plugin puts the result into **buffers
 
 `:Alder new page ...` and the other CLI generators still write straight to disk, and refuse
 to run while an `.alder` buffer of the app has unsaved changes: `:wall` first.
+
+## Search
+
+`<leader>af` (or `:AlderSearch [query]`) opens a picker over the standard library and your app's
+functions. Type a name (`split`), a module (`Text.`) or a type (`Text -> Int`, `: List Text`); the
+detail pane shows the whole signature and doc (`<C-f>` / `<C-b>` scroll it when it is taller
+than the screen). `<CR>` inserts the result after the cursor, or, when
+the cursor is on a typed hole, opens with `: <the hole's type>` and fills the hole, leaving the
+cursor on the first new hole so fills chain. `<C-]>` jumps to an app result's declaration. On a
+hole, `gra` also offers `Search for <type>`, which opens the picker at that hole. This needs an
+`alder` with search (`:LspRestart` after updating); without the language server the picker uses
+`alder search` and inserts the name as plain text.
 
 ## Filling holes
 

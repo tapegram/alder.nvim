@@ -24,6 +24,7 @@ function M.start(buf)
     name = 'alder',
     cmd = { config.options.cmd, 'lsp' },
     root_dir = r,
+    capabilities = vim.tbl_deep_extend('force', vim.lsp.protocol.make_client_capabilities(), { experimental = { alderSearch = true } }),
     handlers = { ['alder/scratch'] = require('alder.scratch').handler },
     -- Neovim schedules the semantic token start after on_attach and reads the capability then,
     -- so deleting it here keeps tree-sitter the one source of colour (0.11 has no

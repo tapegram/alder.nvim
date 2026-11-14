@@ -77,6 +77,10 @@ vim.api.nvim_create_user_command('AlderRoutes', function()
   require('alder.routes').pick()
 end, { desc = 'the routes of the app in a fuzzy picker; select one to jump to its declaration' })
 
+vim.api.nvim_create_user_command('AlderSearch', function(o)
+  require('alder.search').open({ query = o.args })
+end, { nargs = '?', desc = 'the search picker: find a function by name or type; fills the hole under the cursor' })
+
 vim.api.nvim_create_user_command('AlderDiagnostics', function()
   require('alder.keys').actions.diagnostics()
 end, { desc = 'alder diagnostics of the open buffers in the quickfix list' })
@@ -141,4 +145,14 @@ end, {
 vim.lsp.commands['alder.generate'] = function(cmd, ctx)
   local g = require('alder.ui').plain(cmd.arguments[1])
   require('alder.modal').open(ctx.bufnr, { generator = g.id, sets = g.sets })
+end
+
+-- The "Search for <type>" code action on a typed hole opens the search picker at that hole; the
+-- picker takes the buffer and window from the current ones, so the action's buffer is made current.
+vim.lsp.commands['alder.search'] = function(cmd, ctx)
+  local a = require('alder.ui').plain(cmd.arguments[1])
+  if ctx.bufnr and vim.api.nvim_buf_is_valid(ctx.bufnr) and vim.api.nvim_get_current_buf() ~= ctx.bufnr then
+    vim.api.nvim_set_current_buf(ctx.bufnr)
+  end
+  require('alder.search').open({ at = { buf = ctx.bufnr, position = a.position } })
 end

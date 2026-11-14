@@ -15,12 +15,13 @@ M.actions = {
     if require('alder.scratch').is_scratch(0) then require('alder.scratch').open_value() end
   end,
   routes = function() require('alder.routes').pick() end,
+  search = function() require('alder.search').open() end,
   send = function(mode) require('alder.scratch').send_current(mode or 'n') end,
 }
 
 -- PROJECT are the actions that need an Alder project but no .alder buffer: they are global maps
 -- (attach_global) that say so outside a project. The rest are buffer-local maps in .alder files.
-M.PROJECT = { generate = true, test = true, scratch = true, routes = true }
+M.PROJECT = { generate = true, test = true, scratch = true, routes = true, search = true }
 
 -- MODES are the modes an action is mapped in (default: normal only); in 'x' the action gets 'x'.
 M.MODES = { send = { 'n', 'x' } }
@@ -36,6 +37,7 @@ local DESC = {
   scratch_value = 'alder: open the scratch value at the cursor',
   send = 'alder: send to scratch.alder',
   routes = 'alder: the routes of the app (jump to a page or msg)',
+  search = 'alder: search functions by name or type (fills a hole under the cursor)',
 }
 
 local function mapped(project)
